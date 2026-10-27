@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Video Content Site</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>🎬 Content Site</h1>
+    <form id="searchForm" class="search">
+      <input id="searchInput" type="text" placeholder="Search videos..." autocomplete="off" />
+      <button type="submit">Search</button>
+      <button type="button" id="clearSearch" class="ghost">✕</button>
+    </form>
+  </header>
+
+  <main id="grid" class="grid"></main>
+
+  <div id="sentinel" class="sentinel">Loading more...</div>
+  <div id="endOfList" class="endOfList" hidden>You're all caught up 🎉</div>
+
+  <!-- Video player modal -->
+  <div id="player" class="player" hidden>
+    <div class="player-inner">
+      <button id="closePlayer" class="close">✕</button>
+      <video id="video" controls playsinline></video>
+      <div class="player-info">
+        <h2 id="vTitle"></h2>
+        <div id="vMeta" class="meta"></div>
+        <div class="actions">
+          <button id="likeBtn" class="btn">
+            <span id="likeIcon">👍</span> <span id="likeCount">0</span>
+          </button>
+          <button id="shareBtn" class="btn">
+            <span>↗</span> <span id="shareCount">0</span> Share
+          </button>
+          <a id="copyLink" class="btn" href="#" download>Copy link</a>
+        </div>
+        <p id="vDesc" class="desc"></p>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

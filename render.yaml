@@ -1,0 +1,27 @@
+# Render deployment config for the content site.
+# Env var values are NOT stored here — set them in the Render dashboard:
+#   TELEGRAM_API_ID, TELEGRAM_API_HASH, TELEGRAM_SESSION, TELEGRAM_CHANNEL, ADMIN_API_KEY
+services:
+  - type: web
+    name: content-site
+    runtime: node
+    plan: free
+    autoDeploy: true
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "10000"
+      - key: TELEGRAM_API_ID
+        sync: false
+      - key: TELEGRAM_API_HASH
+        sync: false
+      - key: TELEGRAM_SESSION
+        sync: false
+      - key: TELEGRAM_CHANNEL
+        sync: false
+      - key: ADMIN_API_KEY
+        sync: false
