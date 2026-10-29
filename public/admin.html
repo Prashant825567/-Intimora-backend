@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Panel — Video Upload</title>
+  <link rel="stylesheet" href="/style.css" />
+  <style>
+    body { background: #0a0a10; }
+    .admin-wrap { max-width: 900px; margin: 0 auto; padding: 20px; }
+    .card-box { background: var(--card); border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+    .card-box h2 { font-size: 18px; margin-bottom: 14px; }
+    .form-row { margin-bottom: 14px; }
+    .form-row label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+    .form-row input[type=text], .form-row textarea, .form-row input[type=file] {
+      width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #333;
+      background: #15151b; color: var(--text); font-size: 14px;
+    }
+    .form-row textarea { resize: vertical; min-height: 60px; }
+    .file-name { font-size: 12px; color: var(--accent); margin-top: 4px; }
+    .btn-primary {
+      padding: 11px 20px; border: none; border-radius: 8px; background: var(--accent);
+      color: #fff; cursor: pointer; font-weight: 600; font-size: 14px;
+    }
+    .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+    .btn-danger {
+      padding: 6px 12px; border: none; border-radius: 6px; background: #c0392b;
+      color: #fff; cursor: pointer; font-size: 13px;
+    }
+    .btn-ghost {
+      padding: 8px 14px; border: 1px solid #333; border-radius: 8px; background: transparent;
+      color: var(--text); cursor: pointer; font-size: 13px;
+    }
+    .status { padding: 10px 14px; border-radius: 8px; margin-top: 12px; font-size: 14px; }
+    .status.ok { background: rgba(46,204,113,.15); color: #2ecc71; }
+    .status.err { background: rgba(231,76,60,.15); color: #e74c3c; }
+    .status.info { background: rgba(52,152,219,.15); color: #3498db; }
+    .progress { height: 6px; background: #222; border-radius: 3px; margin-top: 10px; overflow: hidden; }
+    .progress-bar { height: 100%; background: var(--accent); width: 0%; transition: width .2s; }
+    .video-item {
+      display: flex; gap: 12px; padding: 12px; border-radius: 8px; background: #15151b;
+      margin-bottom: 10px; align-items: center;
+    }
+    .video-item .v-thumb { width: 90px; height: 50px; border-radius: 6px; object-fit: cover; background: #000; }
+    .video-item .v-info { flex: 1; }
+    .video-item .v-title { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
+    .video-item .v-stats { font-size: 12px; color: var(--muted); }
+    .video-item .v-id { font-size: 10px; color: #555; }
+    .empty { text-align: center; color: var(--muted); padding: 30px; }
+    .key-row { display: flex; gap: 8px; align-items: center; }
+    .key-row input { flex: 1; }
+    .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px;
+      background: rgba(108,92,231,.3); color: #a29bfe; margin-left: 6px; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <h1>⚙️ Admin Panel</h1>
+    <a href="/" class="btn-ghost" style="text-decoration:none;">← Back to Site</a>
+  </header>
+
+  <div class="admin-wrap">
+
+    <!-- API Key -->
+    <div class="card-box">
+      <h2>🔑 Admin API Key</h2>
+      <div class="key-row">
+        <input type="text" id="apiKey" placeholder="Enter your ADMIN_API_KEY..." />
+        <button class="btn-primary" onclick="saveKey()">Save</button>
+      </div>
+      <div id="keyStatus" class="status info" style="display:none;"></div>
+    </div>
+
+    <!-- Upload -->
+    <div class="card-box">
+      <h2>⬆️ Upload Video</h2>
+      <div class="form-row">
+        <label>Title *</label>
+        <input type="text" id="title" placeholder="Video title..." />
+      </div>
+      <div class="form-row">
+        <label>Description (optional)</label>
+        <textarea id="description" placeholder="Short description..."></textarea>
+      </div>
+      <div class="form-row">
+        <label>Video File *</label>
+        <input type="file" id="videoFile" accept="video/*" />
+        <div class="file-name" id="fileName"></div>
+      </div>
+      <button class="btn-primary" id="uploadBtn" onclick="uploadVideo()">Upload to Telegram</button>
+      <div class="progress" id="progress" style="display:none;"><div class="progress-bar" id="progressBar"></div></div>
+      <div id="uploadStatus"></div>
+      <p style="font-size:12px;color:var(--muted);margin-top:10px;">
+        💡 Thumbnail <span class="tag">auto</span> — ffmpeg se generate hogi, Telegram me upload hogi. Tumko kuch karna nahi hai.
+      </p>
+    </div>
+
+    <!-- Video List -->
+    <div class="card-box">
+      <h2>📋 Videos (<span id="count">0</span>)</h2>
+      <button class="btn-ghost" onclick="loadVideos()">🔄 Refresh</button>
+      <div id="videoList" style="margin-top:14px;"></div>
+    </div>
+
+  </div>
+
+  <script src="/admin.js"></script>
+</body>
+</html>

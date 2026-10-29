@@ -320,6 +320,11 @@ app.get("/api/admin/sync", adminAuth, async (req, res) => {
 // ============================================================
 // STATIC FRONTEND
 // ============================================================
+// Admin panel at /admin
+app.get("/admin", (req, res) => {
+  res.sendFile(path.join(__dirname, "..", "public", "admin.html"));
+});
+
 app.use(express.static(path.join(__dirname, "..", "public")));
 
 app.listen(PORT, "0.0.0.0", () => {
