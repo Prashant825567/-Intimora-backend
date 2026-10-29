@@ -300,6 +300,39 @@ app.post("/api/admin/videos/:id/delete", adminAuth, (req, res) => {
   ok(res, { deleted: true });
 });
 
+// Custom thumbnail upload (admin only) — replaces the auto-generated one
+const thumbUpload = multer({
+  storage: multer.diskStorage({
+    destination: TMP_DIR,
+    filename: (req, file, cb) => cb(null, `custom-thumb-${Date.now()}.jpg`),
+  }),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB max
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith("image/")) cb(null, true);
+    else cb(new Error("File must be an image (jpg/png/webp)"));
+  },
+});
+
+app.post("/api/admin/videos/:id/thumbnail", adminAuth, thumbUpload.single("thumbnail"), async (req, res) => {
+  const v = db.getVideo(req.params.id);
+  if (!v) return fail(res, "Video not found", 404);
+  const file = req.file;
+  if (!file) return fail(res, "No thumbnail file uploaded");
+  try {
+    const thumbLoc = await tg.uploadThumbnail(file.path);
+    db.updateThumbnail(v.id, thumbLoc);
+    // also update the metadata message in Telegram
+    const updated = db.getVideo(v.id);
+    const metadata = tg.buildMetadata(updated);
+    await tg.editMetadata(updated.meta_msg_id, metadata);
+    ok(res, publicVideo(db.getVideo(v.id)));
+  } catch (e) {
+    fail(res, e.message, 500);
+  } finally {
+    try { fs.unlinkSync(file.path); } catch {}
+  }
+});
+
 // Rebuild SQLite cache from Telegram metadata (sync / restore after DB loss)
 app.get("/api/admin/sync", adminAuth, async (req, res) => {
   try {
@@ -320,6 +353,12 @@ app.get("/api/admin/sync", adminAuth, async (req, res) => {
 // ============================================================
 // STATIC FRONTEND
 // ============================================================
+// JSON error handler (replaces Express's default HTML error page)
+app.use((err, req, res, next) => {
+  if (err) return fail(res, err.message || "Internal error", 400);
+  next();
+});
+
 // Admin panel at /admin
 app.get("/admin", (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "admin.html"));

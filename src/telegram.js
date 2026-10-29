@@ -126,6 +126,28 @@ async function uploadVideo(filePath, { caption, thumbPath }) {
   return { ...videoLoc, ...thumbLoc };
 }
 
+// ================= UPLOAD THUMBNAIL (custom) =================
+// Uploads a custom thumbnail image to the channel as a photo.
+async function uploadThumbnail(imagePath) {
+  const client = await getClient();
+  const channel = process.env.TELEGRAM_CHANNEL;
+  if (!channel) throw new Error("TELEGRAM_CHANNEL not set");
+
+  const msg = await client.sendFile(channel, {
+    file: imagePath,
+    forceDocument: false,     // send as a photo
+    workers: 2,
+  });
+  const photo = msg.photo;
+  if (!photo) throw new Error("Telegram did not return a photo");
+  return {
+    thumb_doc_id: String(photo.id),
+    thumb_access_hash: String(photo.accessHash),
+    thumb_file_ref: refToBase64(photo.fileReference),
+    thumb_size: Number(photo.size),
+  };
+}
+
 // ================= STREAMING (HTTP range) =================
 // Telegram stores files as 512 KB parts. With precise:false we fetch part-aligned
 // ranges (contiguous, exact bytes) and discard any misaligned head. This gives a
@@ -281,6 +303,7 @@ module.exports = {
   sendLoginCode,
   verifyLogin,
   uploadVideo,
+  uploadThumbnail,
   streamRange,
   fetchThumbnail,
   buildMetadata,

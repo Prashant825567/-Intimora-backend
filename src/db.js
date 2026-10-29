@@ -126,6 +126,27 @@ function setMetaMsgId(videoId, metaMsgId) {
   updateMetaMsgId.run(metaMsgId, now(), videoId);
 }
 
+// ---- update thumbnail (custom thumbnail upload) ----
+const updateThumbnailStmt = db.prepare(`
+  UPDATE videos SET
+    thumb_doc_id = @thumb_doc_id,
+    thumb_access_hash = @thumb_access_hash,
+    thumb_file_ref = @thumb_file_ref,
+    thumb_size = @thumb_size,
+    updated_at = @now
+  WHERE id = @id
+`);
+function updateThumbnail(id, thumb) {
+  updateThumbnailStmt.run({
+    id,
+    thumb_doc_id: thumb.thumb_doc_id || "",
+    thumb_access_hash: thumb.thumb_access_hash || "",
+    thumb_file_ref: thumb.thumb_file_ref || "",
+    thumb_size: thumb.thumb_size || 0,
+    now: now(),
+  });
+}
+
 // ---- upsert a video from Telegram metadata (sync / rebuild from Telegram) ----
 // `meta` is the parsed metadata object from a Telegram JSON message.
 // If the video already exists (by id), stats are preserved; only file/desc/meta_msg_id update.
@@ -260,6 +281,7 @@ module.exports = {
   toggleLike,
   deleteVideo,
   setMetaMsgId,
+  updateThumbnail,
   upsertVideoFromMeta,
   newId,
 };
