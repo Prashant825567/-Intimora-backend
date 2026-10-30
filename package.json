@@ -4,8 +4,8 @@
   "description": "Video content site — Express backend + Telegram MTProto storage on Render",
   "main": "src/server.js",
   "scripts": {
-    "start": "node src/server.js",
-    "dev": "node --watch src/server.js",
+    "start": "node functions/server.js",
+    "dev": "node --watch functions/server.js",
     "login": "node scripts/login.js"
   },
   "dependencies": {
