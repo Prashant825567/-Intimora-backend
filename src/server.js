@@ -334,6 +334,8 @@ exports.handler = serverless(app);
 if (require.main === module) {
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Content site running on port ${PORT}`);
-    console.log(`Telegram channel: ${process.env.TELEGRAM_CHANNEL || "(not set)"}`);
+    console.log(`Video channel:     ${process.env.TELEGRAM_CHANNEL_VIDEO || "(not set)"}`);
+    console.log(`Thumbnail channel: ${process.env.TELEGRAM_CHANNEL_THUMB || "(not set)"}`);
+    console.log(`Metadata channel:  ${process.env.TELEGRAM_CHANNEL_META || "(not set)"}`);
   });
 }

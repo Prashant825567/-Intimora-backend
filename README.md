@@ -21,10 +21,10 @@ Thumbnails                     →  Client-side generated (HTML5 video + canvas)
 
 ## Data Flow
 
-Each video has **3 messages** in the Telegram channel:
-1. **Video** — video document (exact bytes, no compression)
-2. **Thumbnail** — photo (client-generated, uploaded with video)
-3. **Metadata** — JSON text message with title, description, views, likes, shares, file locations
+Each video has **3 messages across 3 separate channels**:
+1. **Video channel** — video document (exact bytes, no compression)
+2. **Thumbnail channel** — photo (client-generated, uploaded with video)
+3. **Metadata channel** — JSON text message with title, description, views, likes, shares, file locations
 
 When stats change (views/likes/shares), the metadata message is **edited in place** in Telegram.
 
@@ -64,8 +64,10 @@ In Netlify dashboard → Site settings → Environment variables:
 | `TELEGRAM_API_ID` | From my.telegram.org |
 | `TELEGRAM_API_HASH` | From my.telegram.org |
 | `TELEGRAM_SESSION` | From `npm run login` |
-| `TELEGRAM_CHANNEL` | Your channel (e.g. `@your_channel`) |
-| `TELEGRAM_CHANNEL_PUBLIC` | Public username for CDN redirect (optional) |
+| `TELEGRAM_CHANNEL_VIDEO` | Video channel (e.g. `@IntimoraVideos`) |
+| `TELEGRAM_CHANNEL_THUMB` | Thumbnail channel (e.g. `@IntimoraThumbs`) |
+| `TELEGRAM_CHANNEL_META` | Metadata channel (e.g. `@IntimoraMeta`) |
+| `TELEGRAM_CHANNEL_PUBLIC` | Video channel's public username (e.g. `IntimoraVideos`) |
 | `ADMIN_API_KEY` | Your admin key |
 
 ### 4. Test

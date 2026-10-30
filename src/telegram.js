@@ -14,6 +14,23 @@ function cfg() {
   return { apiId, apiHash };
 }
 
+// ---- Channel helpers (3 separate channels) ----
+function channelVideo() {
+  const c = process.env.TELEGRAM_CHANNEL_VIDEO;
+  if (!c) throw new Error("TELEGRAM_CHANNEL_VIDEO not set");
+  return c;
+}
+function channelThumb() {
+  const c = process.env.TELEGRAM_CHANNEL_THUMB;
+  if (!c) throw new Error("TELEGRAM_CHANNEL_THUMB not set");
+  return c;
+}
+function channelMeta() {
+  const c = process.env.TELEGRAM_CHANNEL_META;
+  if (!c) throw new Error("TELEGRAM_CHANNEL_META not set");
+  return c;
+}
+
 async function getClient() {
   if (_client && _client.isConnected && _client.isConnected()) return _client;
   const { apiId, apiHash } = cfg();
@@ -79,15 +96,14 @@ function refFromBase64(b64) {
 // as a photo so we can serve it independently and durably.
 async function uploadVideo(filePath, { caption, thumbPath }) {
   const client = await getClient();
-  const channel = process.env.TELEGRAM_CHANNEL;
-  if (!channel) throw new Error("TELEGRAM_CHANNEL not set");
+  const channel = channelVideo();
 
-  // 1) upload the video document (with thumbnail attached)
+  // 1) upload the video document (with thumbnail attached) — VIDEO channel
   const msg = await client.sendFile(channel, {
     file: filePath,
     caption: caption || "",
-    forceDocument: true,        // exact bytes, no video processing
-    thumb: thumbPath,           // thumbnail attached to the document
+    forceDocument: true,
+    thumb: thumbPath,
     workers: 4,
   });
 
@@ -104,12 +120,13 @@ async function uploadVideo(filePath, { caption, thumbPath }) {
     tg_msg_id: msg.id,
   };
 
-  // 2) upload the thumbnail as a separate photo (durable, independently streamable)
+  // 2) upload the thumbnail as a separate photo — THUMBNAIL channel
   let thumbLoc = null;
   if (thumbPath) {
-    const tmsg = await client.sendFile(channel, {
+    const thumbChannel = channelThumb();
+    const tmsg = await client.sendFile(thumbChannel, {
       file: thumbPath,
-      forceDocument: false,     // send as a photo
+      forceDocument: false,
       workers: 2,
     });
     const photo = tmsg.photo;
@@ -131,8 +148,7 @@ async function uploadVideo(filePath, { caption, thumbPath }) {
 // Uploads a custom thumbnail image to the channel as a photo.
 async function uploadThumbnail(imagePath) {
   const client = await getClient();
-  const channel = process.env.TELEGRAM_CHANNEL;
-  if (!channel) throw new Error("TELEGRAM_CHANNEL not set");
+  const channel = channelThumb();
 
   const msg = await client.sendFile(channel, {
     file: imagePath,
@@ -267,8 +283,7 @@ function buildMetadata(v) {
 // Send metadata as a text message. Returns the Telegram message id.
 async function sendMetadata(metadata) {
   const client = await getClient();
-  const channel = process.env.TELEGRAM_CHANNEL;
-  if (!channel) throw new Error("TELEGRAM_CHANNEL not set");
+  const channel = channelMeta();
   const msg = await client.sendMessage(channel, { message: JSON.stringify(metadata) });
   return msg.id;
 }
@@ -276,15 +291,15 @@ async function sendMetadata(metadata) {
 // Edit an existing metadata message with fresh data.
 async function editMetadata(msgId, metadata) {
   const client = await getClient();
-  const channel = process.env.TELEGRAM_CHANNEL;
+  const channel = channelMeta();
   await client.editMessage(channel, { message: msgId, text: JSON.stringify(metadata) });
 }
 
-// Read metadata messages from the channel (for sync / rebuild).
+// Read metadata messages from the META channel (for sync / rebuild).
 // Returns array of { ...metadata, _msgId: Telegram message id }.
 async function readMetadataFromTelegram(limit = 5000) {
   const client = await getClient();
-  const channel = process.env.TELEGRAM_CHANNEL;
+  const channel = channelMeta();
   const result = [];
   for await (const msg of client.iterMessages(channel, { limit })) {
     if (!msg.message) continue; // skip media messages (video/thumbnail)
@@ -299,8 +314,7 @@ async function readMetadataFromTelegram(limit = 5000) {
 // Find a specific video's metadata message by id. Scans messages for the matching JSON.
 async function findVideoById(videoId) {
   const client = await getClient();
-  const channel = process.env.TELEGRAM_CHANNEL;
-  if (!channel) throw new Error("TELEGRAM_CHANNEL not set");
+  const channel = channelMeta();
   for await (const msg of client.iterMessages(channel, { limit: 5000 })) {
     if (!msg.message) continue;
     try {
@@ -324,25 +338,31 @@ async function updateVideoStats(videoId, updates) {
   return data;
 }
 
-// Delete all 3 messages for a video: video document, thumbnail photo, metadata JSON.
+// Delete all 3 messages for a video from 3 separate channels.
 async function deleteVideoMessages(videoId) {
   const client = await getClient();
-  const channel = process.env.TELEGRAM_CHANNEL;
-  if (!channel) throw new Error("TELEGRAM_CHANNEL not set");
 
   const msg = await findVideoById(videoId);
   if (!msg) return { deleted: false };
 
-  const msgIds = [msg._msgId];
-  if (msg.video && msg.video.msgId) msgIds.push(msg.video.msgId);
-  if (msg.thumbnail && msg.thumbnail.msgId) msgIds.push(msg.thumbnail.msgId);
+  const results = { deleted: true, channels: {} };
 
-  await client.deleteMessages(channel, msgIds);
-  return { deleted: true, msgIds };
+  // delete metadata from META channel
+  try { await client.deleteMessages(channelMeta(), [msg._msgId]); results.channels.meta = true; } catch {}
+  // delete video from VIDEO channel
+  if (msg.video && msg.video.msgId) {
+    try { await client.deleteMessages(channelVideo(), [msg.video.msgId]); results.channels.video = true; } catch {}
+  }
+  // delete thumbnail from THUMBNAIL channel
+  if (msg.thumbnail && msg.thumbnail.msgId) {
+    try { await client.deleteMessages(channelThumb(), [msg.thumbnail.msgId]); results.channels.thumb = true; } catch {}
+  }
+
+  return results;
 }
 
 // Get direct Telegram CDN URL for a video (for redirect streaming on serverless platforms).
-// Requires TELEGRAM_CHANNEL_PUBLIC env var (the public username, e.g. "intimora_videos").
+// Requires TELEGRAM_CHANNEL_PUBLIC env var (the VIDEO channel's public username, e.g. "intimora_videos").
 // Returns null if not set (fallback to server streaming).
 function getDirectUrl(video) {
   const publicChannel = process.env.TELEGRAM_CHANNEL_PUBLIC;
