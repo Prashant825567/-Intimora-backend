@@ -12,6 +12,12 @@
 [functions]
   directory = "functions"
 
+# Route /api/* to the directory function (functions/api/index.js)
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200
+
 # Clean URLs — redirect /admin to admin.html
 [[redirects]]
   from = "/admin"
