@@ -9,9 +9,16 @@
   NODE_VERSION = "20"
 
 # Serverless functions directory
-# Directory function at functions/api/index.js automatically routes /api/* to it
+# Directory function at functions/api/index.js handles all /api/* routes
 [functions]
   directory = "functions"
+
+# Route /api/* to the serverless function
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200
+  force = true
 
 # Clean URLs — redirect /admin to admin.html
 [[redirects]]

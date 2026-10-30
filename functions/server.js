@@ -13,6 +13,17 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// ---- Path normalization for Netlify serverless ----
+// When Netlify routes to this function, the path may be:
+//   /api/health          (correct — from redirect rule)
+//   /.netlify/functions/api/health  (when accessed directly)
+// Normalize both to /api/* so Express routes match.
+app.use((req, res, next) => {
+  req.url = req.url.replace(/^\/\.netlify\/functions\/api/, '/api');
+  if (!req.url.startsWith('/api')) req.url = '/api' + req.url;
+  next();
+});
+
 const PORT = parseInt(process.env.PORT, 10) || 10000;
 const TMP_DIR = "/tmp"; // writable on Netlify + local
 
