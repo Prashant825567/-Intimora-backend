@@ -1,0 +1,27 @@
+# Netlify configuration
+# https://docs.netlify.com/configure-builds/file-based-configuration/
+
+[build]
+  command = "npm install"
+  publish = "public"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# Serverless functions directory
+[functions]
+  directory = "functions"
+
+# Clean URLs — redirect /admin to admin.html
+[[redirects]]
+  from = "/admin"
+  to = "/admin.html"
+  status = 200
+
+# Environment variables (set in dashboard for secrets)
+# TELEGRAM_API_ID
+# TELEGRAM_API_HASH
+# TELEGRAM_SESSION
+# TELEGRAM_CHANNEL
+# TELEGRAM_CHANNEL_PUBLIC  (public username for CDN redirect, e.g. "intimora_videos")
+# ADMIN_API_KEY

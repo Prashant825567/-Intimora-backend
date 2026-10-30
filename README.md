@@ -1,173 +1,157 @@
-# 🎬 Content Site — Telegram MTProto Storage on Render
+# Intimora Backend — Video Content Site on Netlify + Telegram
 
-A video content site where videos are stored in a **Telegram private channel** (via MTProto),
-served through your own backend. Features: infinite-scroll home, search, video playback
-(streaming, no direct download), thumbnails, likes & shares.
+A video content site where videos **play in-browser** (not downloadable), with **likes**, **shares**, **thumbnails**, **search**, and **unlimited scrolling**.
+
+- **Backend**: Express (Netlify Serverless Functions)
+- **Storage**: Telegram (via MTProto/teleproto) — videos + metadata + thumbnails
+- **Database**: Telegram JSON messages (no SQLite, no external DB)
+- **Deployment**: Netlify (free tier)
+
+## Architecture
 
 ```
-Browser ──▶ Render (Express)
-                │
-                ├──▶ SQLite (fast cache: metadata + stats)
-                │
-                └──▶ Telegram MTProto ──▶ private channel
-                                          ├── video documents (file bytes)
-                                          ├── thumbnail photos
-                                          └── metadata JSON messages (source of truth)
+Frontend (static HTML/CSS/JS)  →  Netlify CDN
+API (/api/*)                   →  Netlify Functions (Express)
+Database                       →  Telegram (JSON text messages)
+Videos                         →  Telegram (MTProto upload)
+Thumbnails                     →  Client-side generated (HTML5 video + canvas)
 ```
 
-> **Metadata kahan raheta hai?** Har video ka metadata (title, description, views, likes, shares, file locations) **Telegram me bhi** store hota hai — ek JSON text message ke roop me channel me. SQLite ek fast cache hai. Stats change pe Telegram message update hota hai (debounce se). DB lost ho toh `/api/admin/sync` se Telegram se rebuild kar sakte ho.
+**No SQLite, no ffmpeg, no external database.** All data is stored as JSON text messages in Telegram. Works on any serverless platform.
 
----
+## Data Flow
 
-## ⭐ Tumhara sawal: Telegram me kitne channels banau?
+Each video has **3 messages** in the Telegram channel:
+1. **Video** — video document (exact bytes, no compression)
+2. **Thumbnail** — photo (client-generated, uploaded with video)
+3. **Metadata** — JSON text message with title, description, views, likes, shares, file locations
 
-**Answer: Abhi sirf 1 private channel kafi hai.**
+When stats change (views/likes/shares), the metadata message is **edited in place** in Telegram.
 
-- Telegram me channel storage ka koi limit nahi hai (sirf per-file limit hai: free me **2 GB**, premium me 4 GB).
-- Ek private channel me hazaaron videos rakh sakte ho — ek channel sufficient hai start ke liye.
-- Channel **private** rakho (join link disable), sirf tumhara account admin ho.
-- Channel me videos **document** ke roop me save hote hain (original bytes, no compression) — isliye quality barbaad nahi hoti.
-- Ek video ke liye channel me **3 messages** hote hain: 1 video document, 1 thumbnail photo, 1 metadata JSON text. Teeno ek hi channel me — alag channel ki jarurat nahi.
-
-**Jab alag channels banana chahige:**
-- Agar content category-wise organize karna chahte ho (jaise comedy ek channel, tech ek channel) — optional.
-- Agar ek account se bahut zyada upload kar rahe ho aur Telegram rate-limit de raha ho — tab 2nd channel.
-- Situstion me: **1 channel se start karo**, jab zaroorat pade tab badhao.
-
-> Note: Ye ek **user account (userbot)** session hai, bot nahi. Isliye `api_id` + `api_hash` + phone login chahiye. Bot API se 50 MB limit hoti hai, MTProto se 2 GB.
-
----
-
-## 📋 Prerequisites
-
-1. **Node.js 18+** locally (for one-time login).
-2. **Telegram account** + **api_id & api_hash**:
-   - Go to <https://my.telegram.org> → "API development tools" → create app.
-   - Note down `api_id` (number) and `api_hash` (string).
-3. Ek **private Telegram channel** banao (Telegram app se), aur apne account ko admin banao.
-
----
-
-## 🚀 Local setup
+## Quick Start (Local)
 
 ```bash
-cd content-site
 npm install
-cp .env.example .env
-# .env me apna api_id, api_hash, channel dalo:
-# TELEGRAM_API_ID=123456
-# TELEGRAM_API_HASH=xxxxxxxx
-# TELEGRAM_CHANNEL=@your_private_channel   (ya channel numeric id -100123...)
-# ADMIN_API_KEY=koi_long_random_string
+npm run login   # Enter phone → get code → paste code → copy session string
 ```
 
-### Telegram login (ek baar)
+Create `.env` from `.env.example` and fill in Telegram credentials.
 
 ```bash
-npm run login
+npm start       # Server runs on port 10000
 ```
 
-- Phone number dalo → Telegram SMS pe code sending karega → code dalo.
-- Agar 2FA enabled hai to password bhi dalo.
-- Script ek **session string** print karega.
+## Deploy on Netlify
 
-Us session string ko `.env` me `TELEGRAM_SESSION=` ke aage paste karo (ya Render env var me dalo).
+### 1. Create Telegram bot/account & channel
+- Go to [my.telegram.org](https://my.telegram.org) → API tools → create app → copy `api_id` + `api_hash`
+- Run `npm run login` locally → enter phone → get code → paste code → copy session string
+- Create a **private** Telegram channel (or public for CDN streaming)
 
-### Run locally
+### 2. Connect to Netlify
+1. Push code to GitHub
+2. Netlify → **Add new site** → Connect GitHub → select repo
+3. Build settings:
+   - Build command: `npm install`
+   - Publish directory: `public`
+4. Deploy
 
-```bash
-npm start
-# http://localhost:10000
-```
+### 3. Set environment variables
+In Netlify dashboard → Site settings → Environment variables:
 
----
+| Variable | Description |
+|---|---|
+| `TELEGRAM_API_ID` | From my.telegram.org |
+| `TELEGRAM_API_HASH` | From my.telegram.org |
+| `TELEGRAM_SESSION` | From `npm run login` |
+| `TELEGRAM_CHANNEL` | Your channel (e.g. `@your_channel`) |
+| `TELEGRAM_CHANNEL_PUBLIC` | Public username for CDN redirect (optional) |
+| `ADMIN_API_KEY` | Your admin key |
 
-## ☁️ Render pe deploy karna
+### 4. Test
+- Visit `https://your-site.netlify.app/api/health` → `{"ok":true,"data":{"status":"up"}}`
+- Visit `https://your-site.netlify.app/admin` → upload a video
 
-1. Render me "New → Web Service", repo connect karo.
-2. `render.yaml` already hai — runtime auto-detect hogi.
-3. **Environment variables** dalo (Render dashboard → Settings → Environment):
-   - `TELEGRAM_API_ID`
-   - `TELEGRAM_API_HASH`
-   - `TELEGRAM_SESSION` (woh session string jo `npm run login` se mila)
-   - `TELEGRAM_CHANNEL` (jaise `@your_channel`)
-   - `ADMIN_API_KEY`
-4. Deploy karo. Health check `/api/health` succeed hogi.
+## Admin Panel
 
-> Free tier me Render 15 min baad sleep kar deta hai → pehla request thoda slow ho sakta hai.
-> Production ke liye "Always On" (paid) plan recommend hai.
+Visit `/admin` to:
+- **Upload videos** (title + video file → thumbnail auto-generated client-side)
+- **List all videos** with stats
+- **Delete videos** (removes from Telegram)
 
----
+Thumbnails are **compulsory** — generated automatically in the browser when you select a video file.
 
-## 🔐 Admin use (video upload)
+## API Reference
 
-Videos upload karne ke liye admin API use karo (browser ya curl):
+### Public API (no key needed)
 
-```bash
-curl -X POST https://YOUR-APP.onrender.com/api/admin/videos \
-  -H "x-api-key: YOUR_ADMIN_API_KEY" \
-  -F "title=My Video Title" \
-  -F "description=Short description..." \
-  -F "video=@/path/to/video.mp4"
-```
-
-(Admin login web endpoint bhi hai `/api/admin/login/code` + `/verify`, lekin 2FA ke liye `npm run login` easier hai.)
-
----
-
-## 📚 API
-
-### Public
-| Method | Endpoint | Purpose |
+| Method | Endpoint | Description |
 |---|---|---|
-| GET | `/api/videos?cursor=&limit=` | Infinite-scroll list (cursor pagination) |
-| GET | `/api/videos/:id` | Video detail (counts a view) |
-| GET | `/api/videos/:id/stream` | **Stream video (HTTP Range, plays in browser)** |
+| GET | `/api/health` | Health check |
+| GET | `/api/videos?cursor=N&limit=M` | Infinite scroll list |
+| GET | `/api/videos/:id` | Video detail (increments views) |
+| GET | `/api/videos/:id/stream` | Stream video (Range support / CDN redirect) |
 | GET | `/api/videos/:id/thumbnail` | Thumbnail image |
-| GET | `/api/search?q=` | Search by title/description |
-| POST | `/api/videos/:id/like` | Toggle like (body: `{userId}`) |
-| POST | `/api/videos/:id/share` | Record a share |
+| GET | `/api/search?q=QUERY` | Search videos |
+| POST | `/api/videos/:id/like` | Like/unlike (body: `{userId}`) |
+| POST | `/api/videos/:id/share` | Record share |
 
-### Admin (header `x-api-key`)
-| Method | Endpoint | Purpose |
+### Admin API (x-api-key required)
+
+| Method | Endpoint | Description |
 |---|---|---|
-| POST | `/api/admin/videos` | Upload video (multipart: `video`, `title`, `description`) |
-| GET | `/api/admin/videos` | List all |
-| POST | `/api/admin/videos/:id/delete` | Delete |
-| POST | `/api/admin/login/code` | Send SMS code |
-| POST | `/api/admin/login/verify` | Verify code → session string |
-| GET | `/api/admin/sync` | **Rebuild SQLite cache from Telegram** (restore after DB loss) |
+| POST | `/api/admin/videos` | Upload (video + thumbnail + title required) |
+| GET | `/api/admin/videos` | List all videos |
+| POST | `/api/admin/videos/:id/delete` | Delete video |
+| POST | `/api/admin/videos/:id/thumbnail` | Replace thumbnail |
 
----
+## Video Streaming
 
-## 🔧 Technical notes
+Two modes:
 
-- **Videos play but can't be directly downloaded:** videos stream through `/api/videos/:id/stream` with HTTP Range support. Telegram file links/IDs are never exposed to the browser. (True DRM — e.g. encrypted segments / signed tokens — aage add karna padega; basic "no direct download" ek streaming proxy se achieve hota hai.)
-- **Storage:** videos uploaded as **documents** (`forceDocument`) → Telegram stores exact bytes, no transcoding.
-- **Metadata in Telegram:** har video ka metadata (title, description, views, likes, shares, file locations) Telegram channel me ek **JSON text message** ke roop me store hota hai. SQLite ek fast cache hai. Stats (view/like/share) change pe Telegram message debounce se update hota hai. DB khoya ho toh `/api/admin/sync` se Telegram se rebuild karo.
-- **Metadata message format:** `{"t":"meta","id":"...","title":"...","description":"...","views":N,"likes":N,"shares":N,"duration":N,"createdAt":N,"video":{...},"thumbnail":{...}}`
-- **Thumbnails:** generated locally with ffmpeg at upload time, uploaded to Telegram as a separate photo (durable, independently streamable).
-- **Seeking:** uploads are faststart-remuxed (moov atom at front) so browser seeking works smoothly.
-- **Infinite scroll:** cursor-based pagination on an auto-increment `seq` column — no skipped/duplicate items when new videos are added.
-- **Likes:** anonymous via a client-side UUID (localStorage). For real accounts, add an auth provider.
+**CDN Redirect (recommended for Netlify):**
+- Set `TELEGRAM_CHANNEL_PUBLIC` to your channel's public username
+- Server redirects to `https://t.me/{username}/{msg_id}/{filename}`
+- Zero server bandwidth — Telegram CDN serves the video
 
----
+**Server Streaming (fallback):**
+- Server fetches bytes from Telegram and streams to browser
+- Uses server bandwidth (not ideal for serverless)
 
-## 📁 Structure
+## Key Features
+
+- **Infinite scroll** — cursor-based pagination
+- **Search** — filter by title
+- **Like/Unlike** — per-user (localStorage UUID)
+- **Share** — copy link + record share count
+- **View-only** — videos play in browser, no direct download link
+- **Thumbnails** — client-side generated, compulsory on upload
+
+## Project Structure
 
 ```
-content-site/
-├── package.json
-├── render.yaml
-├── .env.example
-├── scripts/login.js        # one-time Telegram login → session string
+├── public/              # Frontend (static)
+│   ├── index.html       # Home page
+│   ├── admin.html       # Admin panel
+│   ├── app.js           # Frontend logic
+│   ├── admin.js         # Admin panel logic
+│   └── style.css        # Styles
 ├── src/
-│   ├── server.js           # Express app + all routes
-│   ├── db.js               # SQLite schema + queries
-│   ├── telegram.js         # MTProto upload + range streaming
-│   └── ffmpeg.js           # thumbnail + duration + faststart
-└── public/
-    ├── index.html          # infinite-scroll grid + player modal
-    ├── style.css
-    └── app.js
+│   ├── server.js        # Express app + Netlify handler
+│   ├── store.js         # Telegram data store (replaces SQLite)
+│   └── telegram.js      # MTProto wrapper (upload, stream, metadata)
+├── functions/
+│   └── api.js           # Netlify function entry point
+├── scripts/
+│   └── login.js         # Telegram login (get session string)
+├── netlify.toml         # Netlify configuration
+├── .env.example         # Environment variables template
+└── package.json
 ```
+
+## Notes
+
+- **Free tier limits**: Netlify 100GB bandwidth, 100K function calls/month, 26s function execution
+- **Telegram free**: 2GB per file, unlimited files
+- **Session expiry**: Session string expires if account is deleted
+- **Channel**: Keep private unless using CDN redirect mode

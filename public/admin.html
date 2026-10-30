@@ -87,11 +87,16 @@
         <input type="file" id="videoFile" accept="video/*" />
         <div class="file-name" id="fileName"></div>
       </div>
+      <div class="form-row">
+        <label>Thumbnail (auto-generated) *</label>
+        <div id="thumbPreview"></div>
+        <div class="status info" id="thumbStatus" style="display:none;"></div>
+      </div>
       <button class="btn-primary" id="uploadBtn" onclick="uploadVideo()">Upload to Telegram</button>
       <div class="progress" id="progress" style="display:none;"><div class="progress-bar" id="progressBar"></div></div>
       <div id="uploadStatus"></div>
       <p style="font-size:12px;color:var(--muted);margin-top:10px;">
-        💡 Thumbnail <span class="tag">auto</span> — ffmpeg se generate hogi, Telegram me upload hogi. Tumko kuch karna nahi hai.
+        💡 Thumbnail <span class="tag">auto</span> — video select karne pe browser me generate hogi. Upload me automatic include hogi. Duration bhi auto-detect hogi.
       </p>
     </div>
 

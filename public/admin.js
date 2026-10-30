@@ -1,7 +1,9 @@
-// Admin panel logic — upload, list, delete videos
+// Admin panel logic — upload (with client-side thumbnail), list, delete videos
 
 const $ = (id) => document.getElementById(id);
 let apiKey = localStorage.getItem("adminKey") || "";
+let thumbnailFile = null;
+let videoDuration = 0;
 
 function fmt(n) {
   if (n >= 1e6) return (n / 1e6).toFixed(1) + "M";
@@ -31,9 +33,76 @@ function saveKey() {
   loadVideos();
 }
 
-// ---- File name display ----
-$("videoFile").addEventListener("change", (e) => {
-  $("fileName").textContent = e.target.files[0] ? "Selected: " + e.target.files[0].name : "";
+// ---- Client-side thumbnail generation ----
+// Loads video in <video> element, seeks to 1s, draws to canvas, returns JPEG Blob.
+function generateThumbnail(file) {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement("video");
+    video.preload = "metadata";
+    video.muted = true;
+    video.playsInline = true;
+    video.src = URL.createObjectURL(file);
+
+    video.addEventListener("loadedmetadata", () => {
+      videoDuration = video.duration || 0;
+      // seek to 1s, or middle if very short
+      video.currentTime = Math.min(1, (video.duration || 2) / 2);
+    });
+
+    video.addEventListener("seeked", () => {
+      try {
+        const canvas = document.createElement("canvas");
+        const w = 640;
+        const h = Math.round((video.videoHeight / video.videoWidth) * w) || 360;
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(video, 0, 0, w, h);
+        fetch(canvas.toDataURL("image/jpeg", 0.8))
+          .then(r => r.blob())
+          .then(blob => {
+            URL.revokeObjectURL(video.src);
+            resolve(blob);
+          });
+      } catch (e) {
+        URL.revokeObjectURL(video.src);
+        reject(new Error("Thumbnail generation failed: " + e.message));
+      }
+    });
+
+    video.addEventListener("error", () => {
+      URL.revokeObjectURL(video.src);
+      reject(new Error("Yeh video se thumbnail nahi ban rahi hai. MP4/WebM format try karo."));
+    });
+  });
+}
+
+// ---- File selection ----
+$("videoFile").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  $("fileName").textContent = file ? "Selected: " + file.name : "";
+  $("thumbPreview").innerHTML = "";
+  thumbnailFile = null;
+  videoDuration = 0;
+
+  if (!file) return;
+
+  // thumbnail is compulsory — generate it now
+  $("thumbStatus").textContent = "Thumbnail generate ho rahi hai...";
+  $("thumbStatus").className = "status info";
+  $("thumbStatus").style.display = "block";
+
+  try {
+    const blob = await generateThumbnail(file);
+    thumbnailFile = new File([blob], "thumbnail.jpg", { type: "image/jpeg" });
+    const url = URL.createObjectURL(blob);
+    $("thumbPreview").innerHTML = `<img src="${url}" style="width:200px;border-radius:8px;border:1px solid #333" />`;
+    $("thumbStatus").textContent = "✅ Thumbnail ready! " + (videoDuration ? "Duration: " + fmtTime(videoDuration) : "");
+    $("thumbStatus").className = "status ok";
+  } catch (err) {
+    $("thumbStatus").textContent = "❌ " + err.message;
+    $("thumbStatus").className = "status err";
+  }
 });
 
 // ---- Upload ----
@@ -42,20 +111,22 @@ async function uploadVideo() {
   const title = $("title").value.trim();
   const description = $("description").value.trim();
   const file = $("videoFile").files[0];
+
   if (!title) return setStatus("uploadStatus", "Title dalo!", "err");
   if (!file) return setStatus("uploadStatus", "Video file select karo!", "err");
+  if (!thumbnailFile) return setStatus("uploadStatus", "Thumbnail zaroori hai — video select karo (auto-generate hogi)", "err");
 
   const btn = $("uploadBtn");
   btn.disabled = true;
   btn.textContent = "Uploading...";
-  $("progress").style.display = "block";
-  $("progressBar").style.width = "10%";
-  setStatus("uploadStatus", "Upload shuru hua... Telegram pe bhej rahe hain (video size ke hisaab se time lagega)", "info");
+  setStatus("uploadStatus", "Upload shuru hua... Telegram pe bhej rahe hain", "info");
 
   const formData = new FormData();
   formData.append("video", file);
+  formData.append("thumbnail", thumbnailFile);
   formData.append("title", title);
   formData.append("description", description);
+  formData.append("duration", videoDuration);
 
   try {
     const res = await fetch("/api/admin/videos", {
@@ -70,20 +141,18 @@ async function uploadVideo() {
     }
 
     const j = await res.json();
-    $("progressBar").style.width = "100%";
-    setStatus("uploadStatus",
-      "✅ Video upload hogya! — " + j.data.title + " (id: " + j.data.id + ")", "ok");
-    // reset form
+    setStatus("uploadStatus", "✅ Video upload hogya! — " + j.data.title + " (id: " + j.data.id + ")", "ok");
     $("title").value = "";
     $("description").value = "";
     $("videoFile").value = "";
     $("fileName").textContent = "";
+    $("thumbPreview").innerHTML = "";
+    thumbnailFile = null;
+    videoDuration = 0;
     setTimeout(loadVideos, 500);
   } catch (e) {
     setStatus("uploadStatus", "❌ " + e.message, "err");
   } finally {
-    $("progress").style.display = "none";
-    $("progressBar").style.width = "0%";
     btn.disabled = false;
     btn.textContent = "Upload to Telegram";
   }
@@ -133,11 +202,8 @@ async function deleteVideo(id) {
       body: JSON.stringify({}),
     });
     const j = await res.json();
-    if (j.ok) {
-      await loadVideos();
-    } else {
-      alert("Delete failed: " + (j.error || "unknown"));
-    }
+    if (j.ok) await loadVideos();
+    else alert("Delete failed: " + (j.error || "unknown"));
   } catch (e) {
     alert("Delete error: " + e.message);
   }

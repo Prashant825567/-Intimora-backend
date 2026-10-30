@@ -119,6 +119,7 @@ async function uploadVideo(filePath, { caption, thumbPath }) {
         thumb_access_hash: String(photo.accessHash),
         thumb_file_ref: refToBase64(photo.fileReference),
         thumb_size: Number(photo.size),
+        thumb_msg_id: tmsg.id,
       };
     }
   }
@@ -145,6 +146,7 @@ async function uploadThumbnail(imagePath) {
     thumb_access_hash: String(photo.accessHash),
     thumb_file_ref: refToBase64(photo.fileReference),
     thumb_size: Number(photo.size),
+    thumb_msg_id: msg.id,
   };
 }
 
@@ -237,11 +239,12 @@ function buildMetadata(v) {
     id: v.id,
     title: v.title,
     description: (v.description || "").slice(0, 1000),
-    views: v.views,
-    likes: v.likes,
-    shares: v.shares,
-    duration: v.duration,
-    createdAt: v.created_at,
+    views: v.views || 0,
+    likes: v.likes || 0,
+    shares: v.shares || 0,
+    likedBy: v.likedBy || [],
+    duration: v.duration || 0,
+    createdAt: v.created_at || Math.floor(Date.now() / 1000),
     video: {
       docId: v.tg_doc_id,
       accessHash: v.tg_access_hash,
@@ -249,12 +252,14 @@ function buildMetadata(v) {
       size: v.tg_size,
       mime: v.tg_mime,
       msgId: v.tg_msg_id,
+      filename: v.tg_filename || "video.mp4",
     },
     thumbnail: v.thumb_doc_id ? {
       docId: v.thumb_doc_id,
       accessHash: v.thumb_access_hash,
       fileRef: v.thumb_file_ref,
       size: v.thumb_size,
+      msgId: v.thumb_msg_id || null,
     } : null,
   };
 }
@@ -291,6 +296,63 @@ async function readMetadataFromTelegram(limit = 5000) {
   return result;
 }
 
+// Find a specific video's metadata message by id. Scans messages for the matching JSON.
+async function findVideoById(videoId) {
+  const client = await getClient();
+  const channel = process.env.TELEGRAM_CHANNEL;
+  if (!channel) throw new Error("TELEGRAM_CHANNEL not set");
+  for await (const msg of client.iterMessages(channel, { limit: 5000 })) {
+    if (!msg.message) continue;
+    try {
+      const data = JSON.parse(msg.message);
+      if (data && data.t === "meta" && data.id === videoId) {
+        return { ...data, _msgId: msg.id };
+      }
+    } catch { /* skip non-JSON */ }
+  }
+  return null;
+}
+
+// Update stats on an existing metadata message (edit in place).
+// `updates` is a partial object to merge into the metadata.
+async function updateVideoStats(videoId, updates) {
+  const msg = await findVideoById(videoId);
+  if (!msg) return null;
+  const data = { ...msg };
+  Object.assign(data, updates);
+  await editMetadata(msg._msgId, data);
+  return data;
+}
+
+// Delete all 3 messages for a video: video document, thumbnail photo, metadata JSON.
+async function deleteVideoMessages(videoId) {
+  const client = await getClient();
+  const channel = process.env.TELEGRAM_CHANNEL;
+  if (!channel) throw new Error("TELEGRAM_CHANNEL not set");
+
+  const msg = await findVideoById(videoId);
+  if (!msg) return { deleted: false };
+
+  const msgIds = [msg._msgId];
+  if (msg.video && msg.video.msgId) msgIds.push(msg.video.msgId);
+  if (msg.thumbnail && msg.thumbnail.msgId) msgIds.push(msg.thumbnail.msgId);
+
+  await client.deleteMessages(channel, msgIds);
+  return { deleted: true, msgIds };
+}
+
+// Get direct Telegram CDN URL for a video (for redirect streaming on serverless platforms).
+// Requires TELEGRAM_CHANNEL_PUBLIC env var (the public username, e.g. "intimora_videos").
+// Returns null if not set (fallback to server streaming).
+function getDirectUrl(video) {
+  const publicChannel = process.env.TELEGRAM_CHANNEL_PUBLIC;
+  if (!publicChannel) return null;
+  const filename = video.video?.filename || "video.mp4";
+  const msgId = video.video?.msgId;
+  if (!msgId) return null;
+  return `https://t.me/${publicChannel}/${msgId}/${filename}`;
+}
+
 // Sync one video's metadata to Telegram (reads DB row, edits the message).
 async function syncMetadataToTelegram(video) {
   if (!video || !video.meta_msg_id) return;
@@ -310,6 +372,10 @@ module.exports = {
   sendMetadata,
   editMetadata,
   readMetadataFromTelegram,
+  findVideoById,
+  updateVideoStats,
+  deleteVideoMessages,
+  getDirectUrl,
   syncMetadataToTelegram,
   refToBase64,
 };
