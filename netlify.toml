@@ -9,14 +9,9 @@
   NODE_VERSION = "20"
 
 # Serverless functions directory
+# Directory function at functions/api/index.js automatically routes /api/* to it
 [functions]
   directory = "functions"
-
-# Route /api/* to the directory function (functions/api/index.js)
-[[redirects]]
-  from = "/api/*"
-  to = "/.netlify/functions/api/:splat"
-  status = 200
 
 # Clean URLs — redirect /admin to admin.html
 [[redirects]]
@@ -28,6 +23,8 @@
 # TELEGRAM_API_ID
 # TELEGRAM_API_HASH
 # TELEGRAM_SESSION
-# TELEGRAM_CHANNEL
-# TELEGRAM_CHANNEL_PUBLIC  (public username for CDN redirect, e.g. "intimora_videos")
+# TELEGRAM_CHANNEL_VIDEO   (video channel ID or @username)
+# TELEGRAM_CHANNEL_THUMB   (thumbnail channel ID)
+# TELEGRAM_CHANNEL_META    (metadata channel ID)
+# TELEGRAM_CHANNEL_PUBLIC  (video channel's public username WITHOUT @, e.g. "intimoravid")
 # ADMIN_API_KEY
