@@ -265,9 +265,8 @@ app.get("/admin", (req, res) => {
 app.use(express.static(path.join(__dirname, "..", "public")));
 
 // ---- Serverless handler + local listen ----
-const handler = serverless(app);
-module.exports = handler;
-module.exports.handler = handler; // Netlify compatibility
+module.exports = app;
+module.exports.handler = serverless(app); // Netlify compatibility
 
 if (require.main === module) {
   app.listen(PORT, "0.0.0.0", () => {
