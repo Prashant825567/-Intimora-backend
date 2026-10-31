@@ -1,0 +1,20 @@
+name = "intimora-load-balancer"
+main = "src/index.js"
+compatibility_date = "2026-10-31"
+
+# KV namespace for request counts and health tracking
+# Create one in Cloudflare dashboard:
+#   Workers & Pages → KV → Create namespace → copy the ID here
+[[kv_namespaces]]
+binding = "LB_KV"
+id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+
+# Backend Netlify servers (comma-separated)
+# Add your actual Netlify deployment URLs here
+[vars]
+SERVERS = "https://intimora-backend.netlify.app,https://a-intimora.netlify.app,https://b-intimora.netlify.app"
+
+# Health check cron — every 2 minutes
+[[triggers]]
+events = ["cron"]
+schedule = "*/2 * * * *"
