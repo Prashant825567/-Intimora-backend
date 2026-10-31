@@ -250,6 +250,108 @@ app.post("/api/admin/videos/:id/delete", adminAuth, async (req, res) => {
 });
 
 // ============================================================
+// TEST — Upload a test video to Telegram via MTProto (no auth)
+// ============================================================
+const fs = require("fs");
+const os = require("os");
+const pathMod = require("path");
+
+app.post("/api/test/upload", async (req, res) => {
+  try {
+    const title = "Test Video - Intimora";
+    const description = "This is a test video uploaded via MTProto to verify the full flow.";
+
+    // Create a small test video file (1MB valid MP4)
+    const testVideoDir = os.tmpdir();
+    const videoPath = pathMod.join(testVideoDir, `test-${Date.now()}.mp4`);
+    const thumbPath = pathMod.join(testVideoDir, `thumb-${Date.now()}.jpg`);
+
+    // Write minimal valid MP4 (ftyp + mdat)
+    const mp4Data = Buffer.from([
+      0x00,0x00,0x00,0x20, 0x66,0x74,0x79,0x70, 0x69,0x73,0x6f,0x6d,
+      0x00,0x00,0x02,0x00, 0x69,0x73,0x6f,0x6d, 0x69,0x73,0x6f,0x6d,
+      0x69,0x73,0x6f,0x6d, 0x00,0x00,0x00,0x08, 0x6d,0x70,0x34,0x32,
+      0x00,0x00,0x00,0x08, 0x6d,0x70,0x34,0x32,
+      0x00,0x00,0x01,0x80, 0x6d,0x64,0x61,0x74,  // mdat with 384 bytes of zeros
+    ]);
+    // Fill with zeros to make it ~1KB
+    const fullMp4 = Buffer.concat([mp4Data, Buffer.alloc(1024 - mp4Data.length, 0)]);
+    fs.writeFileSync(videoPath, fullMp4);
+
+    // Create a minimal JPEG thumbnail
+    const thumbData = Buffer.from([
+      0xFF,0xD8,0xFF,0xE0, 0x00,0x10, 0x4A,0x46,0x49,0x46,0x00,0x01,
+      0x01,0x01, 0x00,0x48,0x00,0x48, 0x00,0x00, 0xFF,0xE1, 0x00,0x06,
+      0x45,0x78,0x69,0x66, 0x00,0x00, 0x49,0x49, 0x2A,0x00, 0x08,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+      0x00,0x01,0x00,0x01, 0x00,0x00,0x00,0x00, 0xFF,0xDA, 0x00,0x08,
+      0x01,0x01,0x00,0x00, 0x3F,0x00, 0x37,0xFF, 0xD9,
+    ]);
+    fs.writeFileSync(thumbPath, thumbData);
+
+    // Upload to Telegram via MTProto
+    const result = await tg.uploadVideo(videoPath, {
+      caption: title,
+      thumbPath: thumbPath,
+    });
+
+    const videoId = `test-${Date.now()}`;
+    const createdAt = Math.floor(Date.now() / 1000);
+
+    // Build metadata
+    const metadata = {
+      t: "meta",
+      id: videoId,
+      title: title,
+      description: description,
+      views: 0,
+      likes: 0,
+      shares: 0,
+      likedBy: [],
+      duration: 10,
+      createdAt: createdAt,
+      video: {
+        tg_doc_id: result.tg_doc_id,
+        tg_access_hash: result.tg_access_hash,
+        tg_file_ref: result.tg_file_ref,
+        tg_size: result.tg_size,
+        tg_mime: result.tg_mime || "video/mp4",
+        tg_msg_id: result.tg_msg_id,
+        tg_filename: "test-video.mp4",
+      },
+      thumbnail: result.thumb_doc_id ? {
+        thumb_doc_id: result.thumb_doc_id,
+        thumb_access_hash: result.thumb_access_hash,
+        thumb_file_ref: result.thumb_file_ref,
+        thumb_size: result.thumb_size,
+        thumb_msg_id: result.thumb_msg_id,
+      } : null,
+    };
+
+    // Send metadata to Telegram
+    const metaMsgId = await tg.sendMetadata(metadata);
+
+    // Cleanup temp files
+    fs.unlinkSync(videoPath);
+    fs.unlinkSync(thumbPath);
+
+    ok(res, {
+      id: videoId,
+      title: title,
+      uploaded: true,
+      video_msg_id: result.tg_msg_id,
+      thumb_msg_id: result.thumb_msg_id,
+      meta_msg_id: metaMsgId,
+      size: result.tg_size,
+      streamUrl: `/api/videos/${videoId}/stream`,
+      thumbnailUrl: `/api/videos/${videoId}/thumbnail`,
+    });
+  } catch (e) {
+    console.error("test upload error:", e);
+    fail(res, e.message || "Test upload failed", 500);
+  }
+});
+
+// ============================================================
 // STATIC — Admin panel only (no frontend)
 // ============================================================
 // JSON error handler
