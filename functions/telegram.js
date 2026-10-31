@@ -292,15 +292,36 @@ async function fetchThumbnail(video) {
     console.log("[fetchThumbnail] file ref refresh failed:", e.message);
   }
 
-  const loc = makePhotoLocation(video.thumb_doc_id, video.thumb_access_hash, video.thumb_file_ref, "");
-  const res = await client.invoke(new Api.upload.GetFile({
-    location: loc,
-    offset: BigInt(0),
-    limit: PART,
-    precise: false,
-    cdnSupported: false,
-  }));
-  return res.bytes || null;
+  // Try InputDocumentFileLocation first (works for photos uploaded as documents)
+  try {
+    const loc = makeDocLocation(video.thumb_doc_id, video.thumb_access_hash, video.thumb_file_ref, "");
+    const res = await client.invoke(new Api.upload.GetFile({
+      location: loc,
+      offset: BigInt(0),
+      limit: PART,
+      precise: false,
+      cdnSupported: false,
+    }));
+    if (res.bytes && res.bytes.length > 0) return res.bytes;
+  } catch (e) {
+    console.log("[fetchThumbnail] InputDocumentFileLocation failed:", e.message);
+  }
+
+  // Fall back to InputPhotoFileLocation
+  try {
+    const loc = makePhotoLocation(video.thumb_doc_id, video.thumb_access_hash, video.thumb_file_ref, "");
+    const res = await client.invoke(new Api.upload.GetFile({
+      location: loc,
+      offset: BigInt(0),
+      limit: PART,
+      precise: false,
+      cdnSupported: false,
+    }));
+    return res.bytes || null;
+  } catch (e) {
+    console.log("[fetchThumbnail] InputPhotoFileLocation failed:", e.message);
+    return null;
+  }
 }
 
 // ================= METADATA STORAGE (in Telegram) =================
