@@ -114,8 +114,7 @@ app.get("/api/videos/:id/thumbnail", async (req, res) => {
     res.set("Cache-Control", "public, max-age=86400");
     res.send(img);
   } catch (e) {
-    console.error("thumb error:", e.message);
-    fail(res, "Thumbnail unavailable", 500);
+    fail(res, e.message, 500);
   }
 });
 
@@ -157,8 +156,8 @@ app.get("/api/videos/:id/stream", async (req, res) => {
     }
     res.end();
   } catch (e) {
-    console.error("stream error:", e.message);
     try { res.end(); } catch {}
+    console.error("stream error:", e.message);
   }
 });
 
