@@ -181,6 +181,15 @@ function makeDocLocation(docId, accessHash, fileRef, thumbSize = "") {
   });
 }
 
+function makePhotoLocation(docId, accessHash, fileRef, thumbSize = "") {
+  return new Api.InputPhotoFileLocation({
+    id: BigInt(docId),
+    accessHash: BigInt(accessHash),
+    fileReference: refFromBase64(fileRef),
+    thumbSize,
+  });
+}
+
 // fetch a single 512 KB part
 async function getFileChunk(client, video, offset, limit) {
   const res = await client.invoke(new Api.upload.GetFile({
@@ -190,6 +199,7 @@ async function getFileChunk(client, video, offset, limit) {
     precise: false,
     cdnSupported: false,
   }));
+  console.log(`[getFileChunk] offset=${offset} limit=${limit} bytes=${res.bytes ? res.bytes.length : 0}`);
   return res.bytes || Buffer.alloc(0);
 }
 
@@ -232,7 +242,7 @@ async function* streamRange(video, start, end) {
 async function fetchThumbnail(video) {
   if (!video.thumb_doc_id) return null;
   const client = await getClient();
-  const loc = makeDocLocation(video.thumb_doc_id, video.thumb_access_hash, video.thumb_file_ref, "");
+  const loc = makePhotoLocation(video.thumb_doc_id, video.thumb_access_hash, video.thumb_file_ref, "");
   const res = await client.invoke(new Api.upload.GetFile({
     location: loc,
     offset: BigInt(0),
