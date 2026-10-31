@@ -30,5 +30,4 @@
 # TELEGRAM_CHANNEL_VIDEO   (video channel ID or @username)
 # TELEGRAM_CHANNEL_THUMB   (thumbnail channel ID)
 # TELEGRAM_CHANNEL_META    (metadata channel ID)
-# TELEGRAM_CHANNEL_PUBLIC  (video channel's public username WITHOUT @, e.g. "intimoravid")
 # ADMIN_API_KEY
