@@ -190,6 +190,33 @@ function makePhotoLocation(docId, accessHash, fileRef, thumbSize = "") {
   });
 }
 
+// Refresh expired file reference for a document (video)
+async function refreshDocFileRef(docId, accessHash) {
+  const client = await getClient();
+  const doc = await client.invoke(new Api.messages.GetDocument({
+    document: new Api.InputDocument({
+      id: BigInt(docId),
+      accessHash: BigInt(accessHash),
+    }),
+  }));
+  return doc.document.fileReference;
+}
+
+// Refresh expired file reference for a photo (thumbnail)
+async function refreshPhotoFileRef(photoId, accessHash) {
+  const client = await getClient();
+  const locations = await client.invoke(new Api.photos.GetPhotoFileLocations({
+    id: new Api.InputPhoto({
+      id: BigInt(photoId),
+      accessHash: BigInt(accessHash),
+    }),
+  }));
+  if (locations.locations && locations.locations.length > 0) {
+    return locations.locations[0].fileReference;
+  }
+  return null;
+}
+
 // fetch a single 512 KB part
 async function getFileChunk(client, video, offset, limit) {
   const res = await client.invoke(new Api.upload.GetFile({
@@ -211,6 +238,17 @@ async function* streamRange(video, start, end) {
   const fileSize = video.tg_size;
   if (start >= fileSize) return;
   end = Math.min(end, fileSize - 1);
+
+  // Refresh expired file reference
+  try {
+    const freshRef = await refreshDocFileRef(video.tg_doc_id, video.tg_access_hash);
+    if (freshRef) {
+      video.tg_file_ref = refToBase64(freshRef);
+      console.log("[streamRange] refreshed video file ref");
+    }
+  } catch (e) {
+    console.log("[streamRange] file ref refresh failed:", e.message);
+  }
   const alignedStart = Math.floor(start / PART) * PART;
   let headDiscard = start - alignedStart; // bytes to skip from the very first part
 
@@ -242,6 +280,17 @@ async function* streamRange(video, start, end) {
 async function fetchThumbnail(video) {
   if (!video.thumb_doc_id) return null;
   const client = await getClient();
+
+  // Refresh expired file reference
+  try {
+    const freshRef = await refreshPhotoFileRef(video.thumb_doc_id, video.thumb_access_hash);
+    if (freshRef) {
+      video.thumb_file_ref = refToBase64(freshRef);
+    }
+  } catch (e) {
+    console.log("[fetchThumbnail] file ref refresh failed:", e.message);
+  }
+
   const loc = makePhotoLocation(video.thumb_doc_id, video.thumb_access_hash, video.thumb_file_ref, "");
   const res = await client.invoke(new Api.upload.GetFile({
     location: loc,
