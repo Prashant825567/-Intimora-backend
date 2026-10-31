@@ -2,7 +2,7 @@
   "name": "content-site",
   "version": "1.1.0",
   "description": "Video content site — Express backend + Telegram MTProto storage on Render",
-  "main": "src/server.js",
+  "main": "functions/server.js",
   "scripts": {
     "start": "node functions/server.js",
     "dev": "node --watch functions/server.js",
