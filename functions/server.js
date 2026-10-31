@@ -1,16 +1,15 @@
-// Express server — public API + admin API + static frontend.
-// Compatible with Netlify (serverless-http) and local (node src/server.js).
+// Express server — backend only. Reads data from Telegram, streams videos.
+// Admin panel uploads directly via MTProto (browser), sends metadata here.
+// Compatible with Netlify (serverless-http) and local (node functions/server.js).
 const express = require("express");
 const path = require("path");
-const fs = require("fs");
-const multer = require("multer");
 const serverless = require("serverless-http");
 
 const store = require("./store");
 const tg = require("./telegram");
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
 // ---- Path normalization for Netlify serverless ----
@@ -25,7 +24,6 @@ app.use((req, res, next) => {
 });
 
 const PORT = parseInt(process.env.PORT, 10) || 10000;
-const TMP_DIR = "/tmp"; // writable on Netlify + local
 
 // ---- helpers ----
 function ok(res, data) { return res.json({ ok: true, data }); }
@@ -114,20 +112,13 @@ app.get("/api/videos/:id/thumbnail", async (req, res) => {
   }
 });
 
-// Stream video — redirects to Telegram CDN (serverless-friendly)
-// Falls back to server streaming if TELEGRAM_CHANNEL_PUBLIC is not set
+// Stream video — server-side MTProto streaming with HTTP Range support
+// Each browser range request → backend fetches 512KB chunks from Telegram → streams back
 app.get("/api/videos/:id/stream", async (req, res) => {
   try {
     const v = await store.getVideo(req.params.id);
     if (!v) return fail(res, "Video not found", 404);
 
-    // Try Telegram CDN redirect (best for serverless platforms)
-    const directUrl = tg.getDirectUrl(v);
-    if (directUrl) {
-      return res.redirect(302, directUrl);
-    }
-
-    // Fallback: server streaming (for local / Render)
     const streamFormat = store.toStreamFormat(v);
     let start = 0, end = streamFormat.tg_size - 1, status = 200;
     const range = req.headers.range;
@@ -187,84 +178,50 @@ app.post("/api/videos/:id/share", async (req, res) => {
 // ADMIN API (x-api-key required)
 // ============================================================
 
-app.post("/api/admin/login/code", async (req, res) => {
-  try { await tg.sendLoginCode(req.body.phoneNumber); ok(res, { sent: true }); }
-  catch (e) { fail(res, e.message, 400); }
-});
-
-app.post("/api/admin/login/verify", async (req, res) => {
+// Receive metadata from admin panel (admin uploads directly via MTProto in browser)
+// Stores metadata as JSON message in Telegram metadata channel
+app.post("/api/admin/metadata", adminAuth, async (req, res) => {
   try {
-    const result = await tg.verifyLogin(req.body.phoneNumber, req.body.phoneCode);
-    ok(res, result);
-  } catch (e) { fail(res, e.message, 400); }
-});
-
-// Upload video + thumbnail (both required — thumbnail generated client-side)
-const upload = multer({
-  storage: multer.diskStorage({
-    destination: TMP_DIR,
-    filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`),
-  }),
-  limits: { fileSize: 2 * 1024 * 1024 * 1024 }, // 2 GB (Telegram MTProto free limit)
-});
-
-app.post("/api/admin/videos", adminAuth, upload.fields([
-  { name: "video", maxCount: 1 },
-  { name: "thumbnail", maxCount: 1 },
-]), async (req, res) => {
-  const videoFile = req.files?.video?.[0];
-  const thumbFile = req.files?.thumbnail?.[0];
-  if (!videoFile) return fail(res, "No video file uploaded");
-  if (!thumbFile) return fail(res, "Thumbnail is required — generate it client-side");
-  const title = (req.body.title || "").trim();
-  const description = (req.body.description || "").trim();
-  if (!title) return fail(res, "Title required");
-
-  const tmpFile = videoFile.path;
-  const thumbPath = thumbFile.path;
-
-  try {
-    const videoId = store.newId();
-    const duration = parseInt(req.body.duration, 10) || 0;
-
-    // 1) upload video to Telegram (thumbnail attached to document)
-    const tgLoc = await tg.uploadVideo(tmpFile, {
-      caption: title,
-      thumbPath,
-    });
-
-    // 2) build metadata + send to Telegram as JSON text message
-    const videoObj = {
-      id: videoId,
-      title,
-      description,
-      views: 0, likes: 0, shares: 0, likedBy: [],
-      duration,
-      created_at: Math.floor(Date.now() / 1000),
-      tg_doc_id: tgLoc.tg_doc_id,
-      tg_access_hash: tgLoc.tg_access_hash,
-      tg_file_ref: tgLoc.tg_file_ref,
-      tg_size: tgLoc.tg_size,
-      tg_mime: tgLoc.tg_mime,
-      tg_msg_id: tgLoc.tg_msg_id,
-      tg_filename: videoFile.originalname || "video.mp4",
-      thumb_doc_id: tgLoc.thumb_doc_id,
-      thumb_access_hash: tgLoc.thumb_access_hash,
-      thumb_file_ref: tgLoc.thumb_file_ref,
-      thumb_size: tgLoc.thumb_size,
-      thumb_msg_id: tgLoc.thumb_msg_id,
-    };
-    const metadata = tg.buildMetadata(videoObj);
-    const metaMsgId = await tg.sendMetadata(metadata);
-
-    ok(res, publicVideo({ ...metadata, meta_msg_id: metaMsgId }));
-  } catch (e) {
-    console.error("upload error:", e);
-    fail(res, e.message || "Upload failed", 500);
-  } finally {
-    for (const f of [tmpFile, thumbPath]) {
-      try { if (f && fs.existsSync(f)) fs.unlinkSync(f); } catch {}
+    const metadata = req.body;
+    if (!metadata || !metadata.id || !metadata.video) {
+      return fail(res, "Missing required fields (id, video)");
     }
+
+    // Normalize field names from admin panel format (tg_doc_id → docId etc.)
+    const normalized = {
+      t: "meta",
+      id: metadata.id,
+      title: metadata.title || "Untitled",
+      description: (metadata.description || "").slice(0, 1000),
+      views: metadata.views || 0,
+      likes: metadata.likes || 0,
+      shares: metadata.shares || 0,
+      likedBy: metadata.likedBy || [],
+      duration: metadata.duration || 0,
+      createdAt: metadata.createdAt || Math.floor(Date.now() / 1000),
+      video: {
+        docId: metadata.video.tg_doc_id || metadata.video.docId,
+        accessHash: metadata.video.tg_access_hash || metadata.video.accessHash,
+        fileRef: metadata.video.tg_file_ref || metadata.video.fileRef,
+        size: metadata.video.tg_size || metadata.video.size,
+        mime: metadata.video.tg_mime || metadata.video.mime || "video/mp4",
+        msgId: metadata.video.tg_msg_id || metadata.video.msgId,
+        filename: metadata.video.tg_filename || metadata.video.filename || "video.mp4",
+      },
+      thumbnail: metadata.thumbnail ? {
+        docId: metadata.thumbnail.thumb_doc_id || metadata.thumbnail.docId,
+        accessHash: metadata.thumbnail.thumb_access_hash || metadata.thumbnail.accessHash,
+        fileRef: metadata.thumbnail.thumb_file_ref || metadata.thumbnail.fileRef,
+        size: metadata.thumbnail.thumb_size || metadata.thumbnail.size,
+        msgId: metadata.thumbnail.thumb_msg_id || metadata.thumbnail.msgId,
+      } : null,
+    };
+
+    const metaMsgId = await tg.sendMetadata(normalized);
+    ok(res, { id: metadata.id, meta_msg_id: metaMsgId });
+  } catch (e) {
+    console.error("metadata save error:", e);
+    fail(res, e.message || "Failed to save metadata", 500);
   }
 });
 
@@ -285,46 +242,8 @@ app.post("/api/admin/videos/:id/delete", adminAuth, async (req, res) => {
   } catch (e) { fail(res, e.message, 500); }
 });
 
-// Admin: upload custom thumbnail (replaces existing)
-const thumbUpload = multer({
-  storage: multer.diskStorage({
-    destination: TMP_DIR,
-    filename: (req, file, cb) => cb(null, `custom-thumb-${Date.now()}.jpg`),
-  }),
-  limits: { fileSize: 5 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith("image/")) cb(null, true);
-    else cb(new Error("File must be an image (jpg/png/webp)"));
-  },
-});
-
-app.post("/api/admin/videos/:id/thumbnail", adminAuth, thumbUpload.single("thumbnail"), async (req, res) => {
-  const file = req.file;
-  if (!file) return fail(res, "No thumbnail file uploaded");
-  try {
-    const thumbLoc = await tg.uploadThumbnail(file.path);
-    const v = await store.getVideo(req.params.id);
-    if (!v) return fail(res, "Video not found", 404);
-    // update metadata in Telegram
-    const updated = await tg.updateVideoStats(req.params.id, {
-      thumbnail: {
-        docId: thumbLoc.thumb_doc_id,
-        accessHash: thumbLoc.thumb_access_hash,
-        fileRef: thumbLoc.thumb_file_ref,
-        size: thumbLoc.thumb_size,
-        msgId: thumbLoc.thumb_msg_id,
-      },
-    });
-    ok(res, publicVideo(updated));
-  } catch (e) {
-    fail(res, e.message, 500);
-  } finally {
-    try { fs.unlinkSync(file.path); } catch {}
-  }
-});
-
 // ============================================================
-// STATIC FRONTEND
+// STATIC — Admin panel only (no frontend)
 // ============================================================
 // JSON error handler
 app.use((err, req, res, next) => {
@@ -344,7 +263,7 @@ exports.handler = serverless(app);
 
 if (require.main === module) {
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Content site running on port ${PORT}`);
+    console.log(`Backend running on port ${PORT}`);
     console.log(`Video channel:     ${process.env.TELEGRAM_CHANNEL_VIDEO || "(not set)"}`);
     console.log(`Thumbnail channel: ${process.env.TELEGRAM_CHANNEL_THUMB || "(not set)"}`);
     console.log(`Metadata channel:  ${process.env.TELEGRAM_CHANNEL_META || "(not set)"}`);

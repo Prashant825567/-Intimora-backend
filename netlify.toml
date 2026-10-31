@@ -20,11 +20,8 @@
   status = 200
   force = true
 
-# Clean URLs — redirect /admin to admin.html
-[[redirects]]
-  from = "/admin"
-  to = "/admin.html"
-  status = 200
+# Admin panel at /admin (served by Express)
+# No frontend — backend only
 
 # Environment variables (set in dashboard for secrets)
 # TELEGRAM_API_ID

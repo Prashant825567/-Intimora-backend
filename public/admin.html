@@ -1,114 +1,415 @@
 <!DOCTYPE html>
-<html lang="hi">
+<html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Admin Panel — Video Upload</title>
-  <link rel="stylesheet" href="/style.css" />
-  <style>
-    body { background: #0a0a10; }
-    .admin-wrap { max-width: 900px; margin: 0 auto; padding: 20px; }
-    .card-box { background: var(--card); border-radius: 12px; padding: 20px; margin-bottom: 20px; }
-    .card-box h2 { font-size: 18px; margin-bottom: 14px; }
-    .form-row { margin-bottom: 14px; }
-    .form-row label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
-    .form-row input[type=text], .form-row textarea, .form-row input[type=file] {
-      width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #333;
-      background: #15151b; color: var(--text); font-size: 14px;
-    }
-    .form-row textarea { resize: vertical; min-height: 60px; }
-    .file-name { font-size: 12px; color: var(--accent); margin-top: 4px; }
-    .btn-primary {
-      padding: 11px 20px; border: none; border-radius: 8px; background: var(--accent);
-      color: #fff; cursor: pointer; font-weight: 600; font-size: 14px;
-    }
-    .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
-    .btn-danger {
-      padding: 6px 12px; border: none; border-radius: 6px; background: #c0392b;
-      color: #fff; cursor: pointer; font-size: 13px;
-    }
-    .btn-ghost {
-      padding: 8px 14px; border: 1px solid #333; border-radius: 8px; background: transparent;
-      color: var(--text); cursor: pointer; font-size: 13px;
-    }
-    .status { padding: 10px 14px; border-radius: 8px; margin-top: 12px; font-size: 14px; }
-    .status.ok { background: rgba(46,204,113,.15); color: #2ecc71; }
-    .status.err { background: rgba(231,76,60,.15); color: #e74c3c; }
-    .status.info { background: rgba(52,152,219,.15); color: #3498db; }
-    .progress { height: 6px; background: #222; border-radius: 3px; margin-top: 10px; overflow: hidden; }
-    .progress-bar { height: 100%; background: var(--accent); width: 0%; transition: width .2s; }
-    .video-item {
-      display: flex; gap: 12px; padding: 12px; border-radius: 8px; background: #15151b;
-      margin-bottom: 10px; align-items: center;
-    }
-    .video-item .v-thumb { width: 90px; height: 50px; border-radius: 6px; object-fit: cover; background: #000; }
-    .video-item .v-info { flex: 1; }
-    .video-item .v-title { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
-    .video-item .v-stats { font-size: 12px; color: var(--muted); }
-    .video-item .v-id { font-size: 10px; color: #555; }
-    .empty { text-align: center; color: var(--muted); padding: 30px; }
-    .key-row { display: flex; gap: 8px; align-items: center; }
-    .key-row input { flex: 1; }
-    .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px;
-      background: rgba(108,92,231,.3); color: #a29bfe; margin-left: 6px; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Intimora Admin — Direct MTProto Upload</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f0f1a; color: #e0e0e0; min-height: 100vh; padding: 20px; }
+        .container { max-width: 700px; margin: 0 auto; }
+        h1 { color: #4f9eff; margin-bottom: 20px; font-size: 1.5em; }
+        h2 { color: #7eb8ff; margin: 20px 0 10px; font-size: 1.1em; }
+        .card { background: #1a1a2e; border-radius: 12px; padding: 20px; margin-bottom: 16px; border: 1px solid #2a2a40; }
+        input, textarea, select { width: 100%; padding: 10px 14px; background: #0f0f1a; border: 1px solid #333; border-radius: 8px; color: #e0e0e0; font-size: 14px; margin-bottom: 10px; }
+        input:focus, textarea:focus { border-color: #4f9eff; outline: none; }
+        label { font-size: 13px; color: #888; margin-bottom: 4px; display: block; }
+        button { padding: 10px 20px; border: none; border-radius: 8px; font-size: 14px; cursor: pointer; font-weight: 600; transition: opacity 0.2s; }
+        button:hover { opacity: 0.85; }
+        button:disabled { opacity: 0.4; cursor: not-allowed; }
+        .btn-primary { background: #4f9eff; color: #fff; }
+        .btn-success { background: #2ecc71; color: #fff; }
+        .btn-danger { background: #e74c3c; color: #fff; }
+        .status { padding: 12px 16px; border-radius: 8px; margin: 10px 0; font-size: 14px; }
+        .status-info { background: #1a3a5c; color: #4f9eff; }
+        .status-success { background: #1a4a2c; color: #2ecc71; }
+        .status-error { background: #4a1a1a; color: #e74c3c; }
+        .hidden { display: none; }
+        .progress-bar { height: 8px; background: #222; border-radius: 4px; overflow: hidden; margin: 10px 0; }
+        .progress-fill { height: 100%; background: #4f9eff; width: 0%; transition: width 0.3s; }
+        .config { font-size: 12px; color: #666; background: #111; padding: 10px; border-radius: 6px; margin-bottom: 10px; }
+        .config code { color: #4f9eff; }
+    </style>
 </head>
 <body>
-  <header class="topbar">
-    <h1>⚙️ Admin Panel</h1>
-    <a href="/" class="btn-ghost" style="text-decoration:none;">← Back to Site</a>
-  </header>
+<div class="container">
+    <h1>🎬 Intimora Admin Panel</h1>
 
-  <div class="admin-wrap">
-
-    <!-- API Key -->
-    <div class="card-box">
-      <h2>🔑 Admin API Key</h2>
-      <div class="key-row">
-        <input type="text" id="apiKey" placeholder="Enter your ADMIN_API_KEY..." />
-        <button class="btn-primary" onclick="saveKey()">Save</button>
-      </div>
-      <div id="keyStatus" class="status info" style="display:none;"></div>
+    <!-- Configuration -->
+    <div class="card">
+        <label>Configuration (edit before use)</label>
+        <div class="config">
+            <code>API_ID:</code> <span id="cfg-api-id">REPLACE</span><br>
+            <code>API_HASH:</code> <span id="cfg-api-hash">REPLACE</span><br>
+            <code>VIDEO_CHANNEL:</code> <span id="cfg-video-channel">REPLACE</span><br>
+            <code>THUMB_CHANNEL:</code> <span id="cfg-thumb-channel">REPLACE</span><br>
+            <code>ADMIN_KEY:</code> <span id="cfg-admin-key">REPLACE</span>
+        </div>
+        <button class="btn-primary" onclick="saveConfig()">Save Config</button>
     </div>
 
-    <!-- Upload -->
-    <div class="card-box">
-      <h2>⬆️ Upload Video</h2>
-      <div class="form-row">
-        <label>Title *</label>
-        <input type="text" id="title" placeholder="Video title..." />
-      </div>
-      <div class="form-row">
-        <label>Description (optional)</label>
-        <textarea id="description" placeholder="Short description..."></textarea>
-      </div>
-      <div class="form-row">
-        <label>Video File *</label>
-        <input type="file" id="videoFile" accept="video/*" />
-        <div class="file-name" id="fileName"></div>
-      </div>
-      <div class="form-row">
-        <label>Thumbnail (auto-generated) *</label>
-        <div id="thumbPreview"></div>
-        <div class="status info" id="thumbStatus" style="display:none;"></div>
-      </div>
-      <button class="btn-primary" id="uploadBtn" onclick="uploadVideo()">Upload to Telegram</button>
-      <div class="progress" id="progress" style="display:none;"><div class="progress-bar" id="progressBar"></div></div>
-      <div id="uploadStatus"></div>
-      <p style="font-size:12px;color:var(--muted);margin-top:10px;">
-        💡 Thumbnail <span class="tag">auto</span> — video select karne pe browser me generate hogi. Upload me automatic include hogi. Duration bhi auto-detect hogi.
-      </p>
+    <!-- Login Section -->
+    <div class="card" id="login-section">
+        <h2>📱 Login to Telegram</h2>
+        <label>Phone Number (with country code, e.g. +919876543210)</label>
+        <input type="tel" id="phone" placeholder="+919876543210">
+        <button class="btn-primary" id="send-code-btn" onclick="sendCode()">Send Code</button>
+
+        <div id="code-section" class="hidden">
+            <label>Enter Code</label>
+            <input type="text" id="code" placeholder="12345">
+            <button class="btn-primary" onclick="verifyCode()">Verify</button>
+        </div>
+
+        <div id="password-section" class="hidden">
+            <label>2FA Password (if enabled)</label>
+            <input type="password" id="password" placeholder="••••••">
+            <button class="btn-primary" onclick="verifyPassword()">Confirm</button>
+        </div>
     </div>
+
+    <!-- Upload Section -->
+    <div class="card hidden" id="upload-section">
+        <h2>📤 Upload Video</h2>
+        <label>Video File</label>
+        <input type="file" id="video-file" accept="video/*">
+
+        <label>Thumbnail (compulsory)</label>
+        <input type="file" id="thumb-file" accept="image/*">
+
+        <label>Title</label>
+        <input type="text" id="title" placeholder="Video title">
+
+        <label>Description</label>
+        <textarea id="description" rows="3" placeholder="Video description"></textarea>
+
+        <label>Duration (seconds, optional)</label>
+        <input type="number" id="duration" placeholder="120">
+
+        <button class="btn-success" id="upload-btn" onclick="uploadVideo()">Upload to Telegram</button>
+
+        <div id="upload-progress" class="hidden">
+            <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+            <p id="progress-text" style="font-size:12px;color:#888">Uploading...</p>
+        </div>
+    </div>
+
+    <!-- Status -->
+    <div id="status"></div>
 
     <!-- Video List -->
-    <div class="card-box">
-      <h2>📋 Videos (<span id="count">0</span>)</h2>
-      <button class="btn-ghost" onclick="loadVideos()">🔄 Refresh</button>
-      <div id="videoList" style="margin-top:14px;"></div>
+    <div class="card hidden" id="list-section">
+        <h2>📋 Videos</h2>
+        <button class="btn-primary" onclick="loadVideos()">Refresh</button>
+        <div id="video-list"></div>
     </div>
+</div>
 
-  </div>
+<script type="module">
+// ===== CONFIG =====
+const API_ID = parseInt(localStorage.getItem('api_id') || '0');
+const API_HASH = localStorage.getItem('api_hash') || '';
+const VIDEO_CHANNEL = localStorage.getItem('video_channel') || '';
+const THUMB_CHANNEL = localStorage.getItem('thumb_channel') || '';
+const ADMIN_KEY = localStorage.getItem('admin_key') || '';
 
-  <script src="/admin.js"></script>
+// ===== MTProto Client =====
+let tg = null;
+let codeResolver = null;
+let passwordResolver = null;
+let loggedIn = false;
+
+// Load @mtcute/web from CDN
+const { TelegramClient, InputMedia } = await import('https://esm.sh/@mtcute/web@0.32.7');
+
+// ===== UI Helpers =====
+function showStatus(msg, type = 'info') {
+    const el = document.getElementById('status');
+    el.innerHTML = `<div class="status status-${type}">${msg}</div>`;
+}
+
+function showProgress(pct, text) {
+    document.getElementById('upload-progress').classList.remove('hidden');
+    document.getElementById('progress-fill').style.width = pct + '%';
+    document.getElementById('progress-text').textContent = text || pct + '%';
+}
+
+function hideProgress() {
+    document.getElementById('upload-progress').classList.add('hidden');
+}
+
+// ===== Config =====
+function saveConfig() {
+    const apiId = document.getElementById('cfg-api-id').textContent;
+    const apiHash = document.getElementById('cfg-api-hash').textContent;
+    const videoChannel = document.getElementById('cfg-video-channel').textContent;
+    const thumbChannel = document.getElementById('cfg-thumb-channel').textContent;
+    const adminKey = document.getElementById('cfg-admin-key').textContent;
+
+    if (apiId === 'REPLACE' || !apiId || apiId === '0') {
+        showStatus('⚠️ Please enter API ID first', 'error');
+        return;
+    }
+
+    localStorage.setItem('api_id', apiId);
+    localStorage.setItem('api_hash', apiHash);
+    localStorage.setItem('video_channel', videoChannel);
+    localStorage.setItem('thumb_channel', thumbChannel);
+    localStorage.setItem('admin_key', adminKey);
+
+    showStatus('✅ Config saved', 'success');
+    initClient();
+}
+
+function initClient() {
+    if (tg || !API_ID || API_ID === 0) return;
+
+    tg = new TelegramClient({
+        apiId: API_ID,
+        apiHash: API_HASH,
+        storage: 'localStorage',
+    });
+
+    showStatus('✅ MTProto client initialized', 'success');
+}
+
+// ===== Login =====
+async function sendCode() {
+    if (!tg) { showStatus('⚠️ Save config first', 'error'); return; }
+
+    const phone = document.getElementById('phone').value.trim();
+    if (!phone) { showStatus('⚠️ Enter phone number', 'error'); return; }
+
+    try {
+        showStatus('Sending code...', 'info');
+        document.getElementById('send-code-btn').disabled = true;
+        document.getElementById('code-section').classList.remove('hidden');
+
+        codeResolver = null;
+
+        await tg.start({
+            phone: phone,
+            code: () => new Promise(resolve => {
+                codeResolver = resolve;
+            }),
+            password: () => new Promise(resolve => {
+                passwordResolver = resolve;
+            }),
+        });
+
+        loggedIn = true;
+        showStatus('✅ Logged in successfully!', 'success');
+        document.getElementById('login-section').classList.add('hidden');
+        document.getElementById('upload-section').classList.remove('hidden');
+        document.getElementById('list-section').classList.remove('hidden');
+    } catch (e) {
+        showStatus('❌ Login failed: ' + e.message, 'error');
+        document.getElementById('send-code-btn').disabled = false;
+        document.getElementById('code-section').classList.add('hidden');
+    }
+}
+
+function verifyCode() {
+    const code = document.getElementById('code').value.trim();
+    if (!code) return;
+    if (codeResolver) {
+        codeResolver(code);
+        codeResolver = null;
+        document.getElementById('password-section').classList.remove('hidden');
+        showStatus('Code submitted. Check if 2FA is needed.', 'info');
+    }
+}
+
+function verifyPassword() {
+    const password = document.getElementById('password').value.trim();
+    if (!password) return;
+    if (passwordResolver) {
+        passwordResolver(password);
+        passwordResolver = null;
+        showStatus('Password submitted. Verifying...', 'info');
+    }
+}
+
+// ===== Upload =====
+async function uploadVideo() {
+    if (!tg || !loggedIn) { showStatus('⚠️ Login first', 'error'); return; }
+
+    const videoFile = document.getElementById('video-file').files[0];
+    const thumbFile = document.getElementById('thumb-file').files[0];
+    const title = document.getElementById('title').value.trim();
+    const description = document.getElementById('description').value.trim();
+    const duration = parseInt(document.getElementById('duration').value) || 0;
+
+    if (!videoFile) { showStatus('⚠️ Select a video file', 'error'); return; }
+    if (!thumbFile) { showStatus('⚠️ Thumbnail is compulsory', 'error'); return; }
+    if (!title) { showStatus('⚠️ Enter a title', 'error'); return; }
+    if (!VIDEO_CHANNEL || !THUMB_CHANNEL) { showStatus('⚠️ Set channel IDs in config', 'error'); return; }
+
+    const uploadBtn = document.getElementById('upload-btn');
+    uploadBtn.disabled = true;
+    hideProgress();
+
+    try {
+        showStatus('Uploading video to Telegram...', 'info');
+        showProgress(0, 'Starting upload...');
+
+        // 1) Upload video to VIDEO channel as document
+        const videoMsg = await tg.sendMedia(VIDEO_CHANNEL, InputMedia.document(videoFile, {
+            caption: title,
+            fileName: videoFile.name,
+            mimeType: videoFile.type || 'video/mp4',
+        }));
+
+        showProgress(50, 'Video uploaded! Uploading thumbnail...');
+
+        // 2) Upload thumbnail to THUMB channel as photo
+        const thumbMsg = await tg.sendMedia(THUMB_CHANNEL, InputMedia.photo(thumbFile, {}));
+
+        showProgress(80, 'Thumbnail uploaded! Sending metadata...');
+
+        // 3) Get file metadata from messages
+        const videoDoc = videoMsg.media?.document || videoMsg.media?.video?.document;
+        const thumbPhoto = thumbMsg.media?.photo;
+
+        if (!videoDoc) throw new Error('Could not get video document metadata');
+
+        // 4) Build metadata JSON
+        const videoId = 'vid_' + Date.now();
+        const videoLoc = {
+            tg_doc_id: String(videoDoc.id),
+            tg_access_hash: String(videoDoc.accessHash),
+            tg_file_ref: uint8ToBase64(videoDoc.fileReference),
+            tg_size: Number(videoDoc.size),
+            tg_mime: videoDoc.mimeType || 'video/mp4',
+            tg_msg_id: videoMsg.id,
+            tg_filename: videoFile.name,
+        };
+
+        let thumbLoc = null;
+        if (thumbPhoto) {
+            thumbLoc = {
+                thumb_doc_id: String(thumbPhoto.id),
+                thumb_access_hash: String(thumbPhoto.accessHash),
+                thumb_file_ref: uint8ToBase64(thumbPhoto.fileReference),
+                thumb_size: Number(thumbPhoto.sizes?.[0]?.size || 0),
+                thumb_msg_id: thumbMsg.id,
+            };
+        }
+
+        const metadata = {
+            t: 'meta',
+            id: videoId,
+            title: title,
+            description: description.slice(0, 1000),
+            views: 0,
+            likes: 0,
+            shares: 0,
+            likedBy: [],
+            duration: duration,
+            createdAt: Math.floor(Date.now() / 1000),
+            video: videoLoc,
+            thumbnail: thumbLoc,
+        };
+
+        // 5) Send metadata to backend
+        showProgress(90, 'Sending metadata to backend...');
+        const res = await fetch('/api/admin/metadata', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-API-Key': ADMIN_KEY,
+            },
+            body: JSON.stringify(metadata),
+        });
+
+        const result = await res.json();
+        if (!result.ok) throw new Error(result.error || 'Failed to save metadata');
+
+        showProgress(100, '✅ Upload complete!');
+        showStatus('✅ Video uploaded successfully! ID: ' + videoId, 'success');
+
+        // Reset form
+        document.getElementById('video-file').value = '';
+        document.getElementById('thumb-file').value = '';
+        document.getElementById('title').value = '';
+        document.getElementById('description').value = '';
+        document.getElementById('duration').value = '';
+
+        // Refresh list
+        loadVideos();
+    } catch (e) {
+        showStatus('❌ Upload failed: ' + e.message, 'error');
+    } finally {
+        uploadBtn.disabled = false;
+    }
+}
+
+// ===== Utility =====
+function uint8ToBase64(bytes) {
+    if (!bytes) return '';
+    if (typeof bytes === 'string') return bytes;
+    let binary = '';
+    const len = bytes.byteLength || bytes.length;
+    for (let i = 0; i < len; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
+}
+
+// ===== Video List =====
+async function loadVideos() {
+    if (!ADMIN_KEY) { showStatus('⚠️ Set admin key in config', 'error'); return; }
+    try {
+        const res = await fetch('/api/admin/videos', {
+            headers: { 'X-API-Key': ADMIN_KEY },
+        });
+        const result = await res.json();
+        if (!result.ok) throw new Error(result.error);
+
+        const list = document.getElementById('video-list');
+        if (result.data.length === 0) {
+            list.innerHTML = '<p style="color:#666">No videos yet.</p>';
+            return;
+        }
+
+        list.innerHTML = result.data.map(v => `
+            <div style="padding:10px;border-bottom:1px solid #2a2a40;">
+                <strong>${v.title}</strong>
+                <span style="float:right;color:#888;font-size:12px">${v.views} views</span>
+                <button class="btn-danger" style="margin-top:5px" onclick="deleteVideo('${v.id}')">Delete</button>
+            </div>
+        `).join('');
+    } catch (e) {
+        showStatus('❌ Failed to load videos: ' + e.message, 'error');
+    }
+}
+
+async function deleteVideo(id) {
+    if (!confirm('Delete this video? This will delete from all 3 channels.')) return;
+    try {
+        const res = await fetch('/api/admin/videos/' + id + '/delete', {
+            method: 'POST',
+            headers: { 'X-API-Key': ADMIN_KEY },
+        });
+        const result = await res.json();
+        if (result.ok) {
+            showStatus('✅ Video deleted', 'success');
+            loadVideos();
+        } else {
+            showStatus('❌ Delete failed: ' + (result.error || 'Unknown'), 'error');
+        }
+    } catch (e) {
+        showStatus('❌ Delete failed: ' + e.message, 'error');
+    }
+}
+
+// ===== Init =====
+if (API_ID && API_ID !== 0) {
+    initClient();
+    showStatus('Config loaded from localStorage. Click "Save Config" to update.', 'info');
+} else {
+    showStatus('⚠️ Edit config above and click "Save Config" to initialize.', 'info');
+}
+</script>
 </body>
 </html>
