@@ -203,12 +203,13 @@ async function refreshDocFileRef(docId, accessHash) {
 }
 
 // Refresh expired file reference for a photo (thumbnail)
-async function refreshPhotoFileRef(photoId, accessHash) {
+async function refreshPhotoFileRef(photoId, accessHash, fileRef) {
   const client = await getClient();
   const locations = await client.invoke(new Api.photos.GetPhotoFileLocations({
     id: new Api.InputPhoto({
       id: BigInt(photoId),
       accessHash: BigInt(accessHash),
+      fileReference: refFromBase64(fileRef),
     }),
   }));
   if (locations.locations && locations.locations.length > 0) {
@@ -283,7 +284,7 @@ async function fetchThumbnail(video) {
 
   // Refresh expired file reference
   try {
-    const freshRef = await refreshPhotoFileRef(video.thumb_doc_id, video.thumb_access_hash);
+    const freshRef = await refreshPhotoFileRef(video.thumb_doc_id, video.thumb_access_hash, video.thumb_file_ref);
     if (freshRef) {
       video.thumb_file_ref = refToBase64(freshRef);
     }
