@@ -11,15 +11,15 @@ function newId() {
 // ---- Convert Telegram metadata to stream format (for tg.streamRange / tg.fetchThumbnail) ----
 function toStreamFormat(m) {
   return {
-    tg_doc_id: m.video.docId,
-    tg_access_hash: m.video.accessHash,
-    tg_file_ref: m.video.fileRef,
-    tg_size: m.video.size,
-    tg_mime: m.video.mime || "",
-    thumb_doc_id: m.thumbnail ? m.thumbnail.docId : "",
-    thumb_access_hash: m.thumbnail ? m.thumbnail.accessHash : "",
-    thumb_file_ref: m.thumbnail ? m.thumbnail.fileRef : "",
-    thumb_size: m.thumbnail ? m.thumbnail.size : 0,
+    tg_doc_id: m.video.docId || m.video.tg_doc_id,
+    tg_access_hash: m.video.accessHash || m.video.tg_access_hash,
+    tg_file_ref: m.video.fileRef || m.video.tg_file_ref,
+    tg_size: m.video.size || m.video.tg_size,
+    tg_mime: m.video.mime || m.video.tg_mime || "",
+    thumb_doc_id: m.thumbnail ? (m.thumbnail.docId || m.thumbnail.thumb_doc_id) : "",
+    thumb_access_hash: m.thumbnail ? (m.thumbnail.accessHash || m.thumbnail.thumb_access_hash) : "",
+    thumb_file_ref: m.thumbnail ? (m.thumbnail.fileRef || m.thumbnail.thumb_file_ref) : "",
+    thumb_size: m.thumbnail ? (m.thumbnail.size || m.thumbnail.thumb_size) : 0,
   };
 }
 
