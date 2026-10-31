@@ -278,14 +278,9 @@ app.post("/api/test/upload", async (req, res) => {
     const fullMp4 = Buffer.concat([mp4Data, Buffer.alloc(1024 - mp4Data.length, 0)]);
     fs.writeFileSync(videoPath, fullMp4);
 
-    // Create a minimal JPEG thumbnail
-    const thumbData = Buffer.from([
-      0xFF,0xD8,0xFF,0xE0, 0x00,0x10, 0x4A,0x46,0x49,0x46,0x00,0x01,
-      0x01,0x01, 0x00,0x48,0x00,0x48, 0x00,0x00, 0xFF,0xE1, 0x00,0x06,
-      0x45,0x78,0x69,0x66, 0x00,0x00, 0x49,0x49, 0x2A,0x00, 0x08,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-      0x00,0x01,0x00,0x01, 0x00,0x00,0x00,0x00, 0xFF,0xDA, 0x00,0x08,
-      0x01,0x01,0x00,0x00, 0x3F,0x00, 0x37,0xFF, 0xD9,
-    ]);
+    // Create a minimal but VALID JPEG thumbnail (1x1 pixel)
+    const thumbB64 = "/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAABAAEDASIAAhEBAxEB/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/xAAUAQEAAAAAAAAAAAAAAAAAAAAA/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAwDAQACEQMRAD8AvwA//9k=";
+    const thumbData = Buffer.from(thumbB64, "base64");
     fs.writeFileSync(thumbPath, thumbData);
 
     // Upload to Telegram via MTProto
