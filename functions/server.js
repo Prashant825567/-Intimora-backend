@@ -18,8 +18,15 @@ app.use(express.urlencoded({ extended: true }));
 //   /.netlify/functions/api/health  (when accessed directly)
 // Normalize both to /api/* so Express routes match.
 app.use((req, res, next) => {
-  req.url = req.url.replace(/^\/\.netlify\/functions\/api/, '/api');
-  if (!req.url.startsWith('/api')) req.url = '/api' + req.url;
+  // Only normalize paths that are actually API calls
+  if (req.url.startsWith('/.netlify/functions/api')) {
+    req.url = req.url.replace(/^\/\.netlify\/functions\/api/, '/api');
+  } else if (req.url.startsWith('/api')) {
+    // already correct
+  } else {
+    // non-API path (e.g. /admin) — leave as-is
+    return next();
+  }
   next();
 });
 
