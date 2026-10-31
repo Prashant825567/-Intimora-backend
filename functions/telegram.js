@@ -240,7 +240,26 @@ async function* streamRange(video, start, end) {
   if (start >= fileSize) return;
   end = Math.min(end, fileSize - 1);
 
-  // Refresh expired file reference
+  // For small files (< 50MB), use downloadMedia to avoid file ref expiration
+  if (fileSize < 50 * 1024 * 1024 && video.tg_msg_id) {
+    try {
+      const videoChannel = channelVideo();
+      const messages = await client.getMessages(videoChannel, { ids: [video.tg_msg_id] });
+      if (messages && messages.length > 0) {
+        const msg = messages[0];
+        const bytes = await client.downloadMedia(msg, { outputFile: null });
+        if (bytes && bytes.length > 0) {
+          const chunk = bytes.subarray(start, end + 1);
+          yield chunk;
+          return;
+        }
+      }
+    } catch (e) {
+      console.log("[streamRange] downloadMedia failed:", e.message);
+    }
+  }
+
+  // Fallback: use upload.GetFile with refreshed file reference
   try {
     const freshRef = await refreshDocFileRef(video.tg_doc_id, video.tg_access_hash);
     if (freshRef) {
