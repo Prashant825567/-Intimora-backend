@@ -9,9 +9,9 @@
   NODE_VERSION = "20"
 
 # Serverless functions directory
-# Directory function at functions/api/index.js handles all /api/* routes
+# Directory function at backend/api/index.js handles all /api/* routes
 [functions]
-  directory = "functions"
+  directory = "backend"
 
 # Route /api/* to the serverless function
 [[redirects]]
