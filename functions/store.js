@@ -16,10 +16,12 @@ function toStreamFormat(m) {
     tg_file_ref: m.video.fileRef || m.video.tg_file_ref,
     tg_size: m.video.size || m.video.tg_size,
     tg_mime: m.video.mime || m.video.tg_mime || "",
+    tg_msg_id: m.video.msgId || m.video.tg_msg_id,
     thumb_doc_id: m.thumbnail ? (m.thumbnail.docId || m.thumbnail.thumb_doc_id) : "",
     thumb_access_hash: m.thumbnail ? (m.thumbnail.accessHash || m.thumbnail.thumb_access_hash) : "",
     thumb_file_ref: m.thumbnail ? (m.thumbnail.fileRef || m.thumbnail.thumb_file_ref) : "",
     thumb_size: m.thumbnail ? (m.thumbnail.size || m.thumbnail.thumb_size) : 0,
+    thumb_msg_id: m.thumbnail ? (m.thumbnail.msgId || m.thumbnail.thumb_msg_id) : null,
   };
 }
 

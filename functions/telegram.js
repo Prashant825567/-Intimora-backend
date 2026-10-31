@@ -277,49 +277,41 @@ async function* streamRange(video, start, end) {
   }
 }
 
-// thumbnail (separate photo) — fetch whole small image
+// thumbnail (separate photo) — fetch whole small image using downloadMedia (no file ref needed)
 async function fetchThumbnail(video) {
-  if (!video.thumb_doc_id) return null;
+  if (!video.thumb_msg_id) {
+    // Fallback: try file-based approach
+    if (!video.thumb_doc_id) return null;
+    const client = await getClient();
+    try {
+      const freshRef = await refreshPhotoFileRef(video.thumb_doc_id, video.thumb_access_hash, video.thumb_file_ref);
+      if (freshRef) video.thumb_file_ref = refToBase64(freshRef);
+    } catch {}
+    try {
+      const loc = makePhotoLocation(video.thumb_doc_id, video.thumb_access_hash, video.thumb_file_ref, "");
+      const res = await client.invoke(new Api.upload.GetFile({
+        location: loc,
+        offset: BigInt(0),
+        limit: PART,
+        precise: false,
+        cdnSupported: false,
+      }));
+      return res.bytes || null;
+    } catch {}
+    return null;
+  }
+
+  // Primary: use downloadMedia with message ID (no file ref expiration issue)
   const client = await getClient();
-
-  // Refresh expired file reference
+  const thumbChannel = channelThumb();
   try {
-    const freshRef = await refreshPhotoFileRef(video.thumb_doc_id, video.thumb_access_hash, video.thumb_file_ref);
-    if (freshRef) {
-      video.thumb_file_ref = refToBase64(freshRef);
-    }
+    const messages = await client.getMessages(thumbChannel, { ids: [video.thumb_msg_id] });
+    if (!messages || messages.length === 0) return null;
+    const msg = messages[0];
+    const bytes = await client.downloadMedia(msg, { outputFile: null });
+    return bytes || null;
   } catch (e) {
-    console.log("[fetchThumbnail] file ref refresh failed:", e.message);
-  }
-
-  // Try InputDocumentFileLocation first (works for photos uploaded as documents)
-  try {
-    const loc = makeDocLocation(video.thumb_doc_id, video.thumb_access_hash, video.thumb_file_ref, "");
-    const res = await client.invoke(new Api.upload.GetFile({
-      location: loc,
-      offset: BigInt(0),
-      limit: PART,
-      precise: false,
-      cdnSupported: false,
-    }));
-    if (res.bytes && res.bytes.length > 0) return res.bytes;
-  } catch (e) {
-    console.log("[fetchThumbnail] InputDocumentFileLocation failed:", e.message);
-  }
-
-  // Fall back to InputPhotoFileLocation
-  try {
-    const loc = makePhotoLocation(video.thumb_doc_id, video.thumb_access_hash, video.thumb_file_ref, "");
-    const res = await client.invoke(new Api.upload.GetFile({
-      location: loc,
-      offset: BigInt(0),
-      limit: PART,
-      precise: false,
-      cdnSupported: false,
-    }));
-    return res.bytes || null;
-  } catch (e) {
-    console.log("[fetchThumbnail] InputPhotoFileLocation failed:", e.message);
+    console.log("[fetchThumbnail] downloadMedia failed:", e.message);
     return null;
   }
 }
