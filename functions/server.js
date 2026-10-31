@@ -346,6 +346,16 @@ app.post("/api/test/upload", async (req, res) => {
   }
 });
 
+// Debug endpoint — return raw metadata for a video
+app.get("/api/test/debug/:id", async (req, res) => {
+  try {
+    const v = await store.getVideo(req.params.id);
+    if (!v) return fail(res, "Video not found", 404);
+    const streamFormat = store.toStreamFormat(v);
+    ok(res, { raw: v, streamFormat: streamFormat });
+  } catch (e) { fail(res, e.message, 500); }
+});
+
 // ============================================================
 // STATIC — Admin panel only (no frontend)
 // ============================================================
