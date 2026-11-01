@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Intimora Local Admin</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: #0f0f0f; color: #e0e0e0; padding: 20px; }
+    .container { max-width: 600px; margin: 0 auto; }
+    h1 { font-size: 1.5rem; margin-bottom: 20px; color: #4fc3f7; }
+    h2 { font-size: 1.1rem; margin: 15px 0 10px; color: #81d4fa; }
+    .card { background: #1a1a1a; border-radius: 12px; padding: 20px; margin-bottom: 15px; }
+    label { display: block; font-size: 0.85rem; color: #aaa; margin-bottom: 4px; }
+    input, textarea {
+      width: 100%; padding: 10px 12px; background: #2a2a2a; border: 1px solid #333;
+      border-radius: 8px; color: #e0e0e0; font-size: 0.9rem; margin-bottom: 12px;
+    }
+    input:focus, textarea:focus { outline: none; border-color: #4fc3f7; }
+    button {
+      padding: 10px 20px; border: none; border-radius: 8px; font-size: 0.9rem;
+      cursor: pointer; font-weight: 600; transition: all 0.2s;
+    }
+    .btn-primary { background: #4fc3f7; color: #0f0f0f; }
+    .btn-primary:hover { background: #29b6f6; }
+    .btn-secondary { background: #333; color: #e0e0e0; }
+    .btn-secondary:hover { background: #444; }
+    .btn-danger { background: #ef5350; color: white; }
+    .btn-danger:hover { background: #e53935; }
+    .btn-sm { padding: 6px 12px; font-size: 0.8rem; }
+    .btn-group { display: flex; gap: 8px; flex-wrap: wrap; }
+    .status { padding: 10px 14px; border-radius: 8px; font-size: 0.85rem; margin-bottom: 12px; }
+    .status-success { background: #1b5e20; color: #a5d6a7; }
+    .status-error { background: #b71c1c; color: #ef9a9a; }
+    .status-info { background: #01579b; color: #90caf9; }
+    .progress { height: 8px; background: #333; border-radius: 4px; overflow: hidden; margin-top: 8px; }
+    .progress-bar { height: 100%; background: #4fc3f7; transition: width 0.3s; }
+    .video-list { margin-top: 10px; }
+    .video-item {
+      background: #252525; border-radius: 8px; padding: 12px; margin-bottom: 8px;
+      display: flex; align-items: center; gap: 12px;
+    }
+    .video-item img { width: 60px; height: 40px; object-fit: cover; border-radius: 4px; background: #333; }
+    .video-item-info { flex: 1; }
+    .video-item-title { font-size: 0.9rem; font-weight: 600; }
+    .video-item-meta { font-size: 0.75rem; color: #888; }
+    .divider { height: 1px; background: #333; margin: 15px 0; }
+    .row { display: flex; gap: 10px; }
+    .row > * { flex: 1; }
+    .hidden { display: none; }
+    .login-section { display: none; }
+    .login-section.active { display: block; }
+    .upload-section { display: none; }
+    .upload-section.active { display: block; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎬 Intimora Local Admin</h1>
+
+    <!-- Status -->
+    <div id="status" class="status status-info hidden"></div>
+
+    <!-- Step 1: Config -->
+    <div class="card" id="configCard">
+      <h2>① Config</h2>
+      <label>API ID</label>
+      <input type="text" id="apiId" value="37144075">
+      <label>API Hash</label>
+      <input type="text" id="apiHash" value="57a11adf8679a2e7a2b6184ed7bb9c70">
+      <label>Video Channel ID</label>
+      <input type="text" id="videoChannel" value="-1003756299546">
+      <label>Thumbnail Channel ID</label>
+      <input type="text" id="thumbChannel" value="-1004360811639">
+      <label>Metadata Channel ID</label>
+      <input type="text" id="metaChannel" value="-1003777974779">
+      <button class="btn-primary" onclick="saveConfig()">Save & Continue</button>
+    </div>
+
+    <!-- Step 2: Login -->
+    <div class="card login-section" id="loginSection">
+      <h2>② Telegram Login</h2>
+      <label>Phone Number</label>
+      <input type="text" id="phone" placeholder="+919876543210">
+      <div class="btn-group">
+        <button class="btn-primary" onclick="sendCode()">Send Code</button>
+      </div>
+      <div class="hidden" id="codeSection">
+        <div class="divider"></div>
+        <label>Code</label>
+        <input type="text" id="code" placeholder="12345">
+        <button class="btn-primary" onclick="verifyCode()">Verify</button>
+      </div>
+      <div class="hidden" id="passwordSection">
+        <div class="divider"></div>
+        <label>2FA Password</label>
+        <input type="text" id="password" placeholder="Password">
+        <button class="btn-primary" onclick="verifyPassword()">Submit</button>
+      </div>
+    </div>
+
+    <!-- Step 3: Upload -->
+    <div class="card upload-section" id="uploadSection">
+      <h2>③ Upload Video</h2>
+      <label>Title</label>
+      <input type="text" id="title" placeholder="Video title">
+      <label>Description</label>
+      <textarea id="description" rows="2" placeholder="Video description"></textarea>
+      <label>Video File</label>
+      <input type="file" id="videoFile" accept="video/*">
+      <label>Thumbnail (compulsory)</label>
+      <input type="file" id="thumbFile" accept="image/*">
+      <div class="progress hidden" id="progressContainer">
+        <div class="progress-bar" id="progressBar" style="width:0%"></div>
+      </div>
+      <div class="btn-group" style="margin-top: 10px;">
+        <button class="btn-primary" onclick="uploadVideo()">Upload to Telegram</button>
+      </div>
+    </div>
+
+    <!-- Step 4: Video List -->
+    <div class="card" id="listCard" style="display:none;">
+      <h2>④ Videos</h2>
+      <div class="btn-group">
+        <button class="btn-secondary btn-sm" onclick="loadVideos()">Refresh</button>
+        <button class="btn-secondary btn-sm" onclick="exportMetadata()">Export JSON</button>
+      </div>
+      <div class="video-list" id="videoList"></div>
+    </div>
+
+  </div>
+
+<script type="module">
+import { TelegramClient, InputMedia } from 'https://esm.sh/@mtcute/web@0.32.7';
+
+let tg = null;
+let codeResolver = null;
+let passwordResolver = null;
+let config = {};
+let localMetadata = []; // Store metadata locally
+
+// --- Utility ---
+function showStatus(msg, type = 'info') {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = `status status-${type}`;
+  el.classList.remove('hidden');
+  setTimeout(() => el.classList.add('hidden'), 8000);
+}
+
+function uint8ToBase64(bytes) {
+  let binary = '';
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
+}
+
+// --- Config ---
+function saveConfig() {
+  config = {
+    apiId: parseInt(document.getElementById('apiId').value) || 0,
+    apiHash: document.getElementById('apiHash').value,
+    videoChannel: document.getElementById('videoChannel').value,
+    thumbChannel: document.getElementById('thumbChannel').value,
+    metaChannel: document.getElementById('metaChannel').value,
+  };
+  if (!config.apiId || !config.apiHash) {
+    showStatus('Please enter API ID and API Hash', 'error');
+    return;
+  }
+  if (!config.videoChannel || !config.thumbChannel || !config.metaChannel) {
+    showStatus('Please enter all 3 channel IDs', 'error');
+    return;
+  }
+  // Save to localStorage
+  localStorage.setItem('intimora_config', JSON.stringify(config));
+  // Show login section
+  document.getElementById('configCard').classList.add('hidden');
+  document.getElementById('loginSection').classList.add('active');
+  showStatus('Config saved. Now login to Telegram.', 'success');
+}
+
+// Load saved config
+(function loadSavedConfig() {
+  const saved = localStorage.getItem('intimora_config');
+  if (saved) {
+    config = JSON.parse(saved);
+    document.getElementById('apiId').value = config.apiId || '';
+    document.getElementById('apiHash').value = config.apiHash || '';
+    document.getElementById('videoChannel').value = config.videoChannel || '';
+    document.getElementById('thumbChannel').value = config.thumbChannel || '';
+    document.getElementById('metaChannel').value = config.metaChannel || '';
+  }
+})();
+
+// --- Login ---
+async function sendCode() {
+  const phone = document.getElementById('phone').value;
+  if (!phone) { showStatus('Enter phone number', 'error'); return; }
+
+  showStatus('Sending code...', 'info');
+  try {
+    tg = new TelegramClient(config.apiId, config.apiHash);
+    await tg.start({
+      phoneNumber: phone,
+      phoneCode: () => new Promise(resolve => {
+        codeResolver = resolve;
+        document.getElementById('codeSection').classList.remove('hidden');
+      }),
+      password: () => new Promise(resolve => {
+        passwordResolver = resolve;
+        document.getElementById('passwordSection').classList.remove('hidden');
+      }),
+    });
+    showStatus('Login successful! ✅', 'success');
+    document.getElementById('loginSection').classList.remove('active');
+    document.getElementById('uploadSection').classList.add('active');
+    document.getElementById('listCard').style.display = 'block';
+    loadVideos();
+  } catch (e) {
+    showStatus('Login error: ' + e.message, 'error');
+  }
+}
+
+async function verifyCode() {
+  const code = document.getElementById('code').value;
+  if (codeResolver) codeResolver(code);
+  showStatus('Verifying...', 'info');
+}
+
+async function verifyPassword() {
+  const password = document.getElementById('password').value;
+  if (passwordResolver) passwordResolver(password);
+  showStatus('Verifying...', 'info');
+}
+
+// --- Upload ---
+async function uploadVideo() {
+  const title = document.getElementById('title').value;
+  const description = document.getElementById('description').value;
+  const videoFile = document.getElementById('videoFile').files[0];
+  const thumbFile = document.getElementById('thumbFile').files[0];
+
+  if (!title) { showStatus('Enter title', 'error'); return; }
+  if (!videoFile) { showStatus('Select video file', 'error'); return; }
+  if (!thumbFile) { showStatus('Thumbnail is compulsory', 'error'); return; }
+
+  showStatus('Uploading video to Telegram...', 'info');
+  document.getElementById('progressContainer').classList.remove('hidden');
+  document.getElementById('progressBar').style.width = '0%';
+
+  try {
+    // Upload video
+    const videoMsg = await tg.sendMedia(config.videoChannel, InputMedia.document(videoFile, {
+      caption: title,
+      fileName: videoFile.name,
+      mimeType: videoFile.type || 'video/mp4',
+    }));
+
+    document.getElementById('progressBar').style.width = '60%';
+    showStatus('Video uploaded ✅', 'success');
+
+    // Upload thumbnail
+    const thumbMsg = await tg.sendMedia(config.thumbChannel, InputMedia.photo(thumbFile, {}));
+
+    document.getElementById('progressBar').style.width = '100%';
+    showStatus('Thumbnail uploaded ✅', 'success');
+
+    // Build metadata
+    const doc = videoMsg.media?.document || videoMsg.media?.video;
+    const photo = thumbMsg.media?.photo;
+
+    const metadata = {
+      t: 'meta',
+      id: `local-${Date.now()}`,
+      title: title,
+      description: description,
+      views: 0,
+      likes: 0,
+      shares: 0,
+      likedBy: [],
+      duration: videoFile.size,
+      createdAt: Math.floor(Date.now() / 1000),
+      video: {
+        tg_doc_id: doc?.id ? String(doc.id) : '',
+        tg_access_hash: doc?.accessHash ? String(doc.accessHash) : '',
+        tg_file_ref: doc?.fileReference ? uint8ToBase64(doc.fileReference) : '',
+        tg_size: doc?.size || videoFile.size,
+        tg_mime: doc?.mimeType || videoFile.type || 'video/mp4',
+        tg_msg_id: videoMsg.id,
+        tg_filename: videoFile.name,
+      },
+      thumbnail: {
+        thumb_doc_id: photo?.id ? String(photo.id) : '',
+        thumb_access_hash: photo?.accessHash ? String(photo.accessHash) : '',
+        thumb_file_ref: photo?.fileReference ? uint8ToBase64(photo.fileReference) : '',
+        thumb_size: photo?.size || thumbFile.size,
+        thumb_msg_id: thumbMsg.id,
+      },
+    };
+
+    // Store locally
+    localMetadata.unshift(metadata);
+    localStorage.setItem('intimora_metadata', JSON.stringify(localMetadata));
+
+    // Send metadata to Telegram
+    await tg.sendMedia(config.metaChannel, InputMedia.document(
+      new Blob([JSON.stringify(metadata)], { type: 'application/json' }),
+      { fileName: `${metadata.id}.json`, mimeType: 'application/json' }
+    ));
+
+    showStatus('Upload complete! ✅✅✅', 'success');
+
+    // Reset form
+    document.getElementById('title').value = '';
+    document.getElementById('description').value = '';
+    document.getElementById('videoFile').value = '';
+    document.getElementById('thumbFile').value = '';
+    document.getElementById('progressContainer').classList.add('hidden');
+
+    loadVideos();
+  } catch (e) {
+    showStatus('Upload error: ' + e.message, 'error');
+    document.getElementById('progressContainer').classList.add('hidden');
+  }
+}
+
+// --- Video List ---
+async function loadVideos() {
+  // Load from localStorage
+  const saved = localStorage.getItem('intimora_metadata');
+  if (saved) localMetadata = JSON.parse(saved);
+
+  const list = document.getElementById('videoList');
+  if (localMetadata.length === 0) {
+    list.innerHTML = '<p style="color:#888;padding:20px;">No videos uploaded yet</p>';
+    return;
+  }
+
+  list.innerHTML = localMetadata.map(v => `
+    <div class="video-item">
+      <img src="/api/videos/${v.id}/thumbnail" onerror="this.style.display='none'" alt="">
+      <div class="video-item-info">
+        <div class="video-item-title">${v.title}</div>
+        <div class="video-item-meta">${v.video?.tg_size || 0} bytes · ${new Date(v.createdAt * 1000).toLocaleDateString()}</div>
+      </div>
+      <button class="btn-danger btn-sm" onclick="deleteVideo('${v.id}')">Delete</button>
+    </div>
+  `).join('');
+}
+
+async function deleteVideo(id) {
+  // Delete from local storage
+  localMetadata = localMetadata.filter(v => v.id !== id);
+  localStorage.setItem('intimora_metadata', JSON.stringify(localMetadata));
+  loadVideos();
+  showStatus('Video removed from local list', 'info');
+}
+
+function exportMetadata() {
+  const blob = new Blob([JSON.stringify(localMetadata, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'intimora-metadata.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  showStatus('Metadata exported!', 'success');
+}
+
+// Expose functions globally for onclick
+window.saveConfig = saveConfig;
+window.sendCode = sendCode;
+window.verifyCode = verifyCode;
+window.verifyPassword = verifyPassword;
+window.uploadVideo = uploadVideo;
+window.loadVideos = loadVideos;
+window.deleteVideo = deleteVideo;
+window.exportMetadata = exportMetadata;
+</script>
+</body>
+</html>
