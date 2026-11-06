@@ -389,32 +389,61 @@ async function editMetadata(msgId, metadata) {
 
 // Read metadata messages from the META channel (for sync / rebuild).
 // Returns array of { ...metadata, _msgId: Telegram message id }.
+// Reads BOTH text messages AND file messages (JSON files).
 async function readMetadataFromTelegram(limit = 5000) {
   const client = await getClient();
   const channel = channelMeta();
   const result = [];
   for await (const msg of client.iterMessages(channel, { limit })) {
-    if (!msg.message) continue; // skip media messages (video/thumbnail)
-    try {
-      const data = JSON.parse(msg.message);
-      if (data && data.t === "meta") result.push({ ...data, _msgId: msg.id });
-    } catch { /* not JSON (e.g. video caption) — skip */ }
+    let data = null;
+
+    // Try text message first
+    if (msg.message) {
+      try {
+        data = JSON.parse(msg.message);
+      } catch { /* not JSON — skip */ }
+    }
+
+    // If no text, try file message (JSON file)
+    if (!data && msg.document && msg.document.fileName && msg.document.fileName.endsWith(".json")) {
+      try {
+        const bytes = await client.downloadMedia(msg);
+        const text = bytes.toString("utf-8");
+        data = JSON.parse(text);
+      } catch (e) {
+        console.error(`readMetadataFromTelegram: failed to read JSON file from msg ${msg.id}:`, e.message);
+      }
+    }
+
+    if (data && data.t === "meta") {
+      result.push({ ...data, _msgId: msg.id });
+    }
   }
   return result;
 }
 
 // Find a specific video's metadata message by id. Scans messages for the matching JSON.
+// Reads BOTH text messages AND file messages (JSON files).
 async function findVideoById(videoId) {
   const client = await getClient();
   const channel = channelMeta();
   for await (const msg of client.iterMessages(channel, { limit: 5000 })) {
-    if (!msg.message) continue;
-    try {
-      const data = JSON.parse(msg.message);
-      if (data && data.t === "meta" && data.id === videoId) {
-        return { ...data, _msgId: msg.id };
-      }
-    } catch { /* skip non-JSON */ }
+    let data = null;
+
+    if (msg.message) {
+      try { data = JSON.parse(msg.message); } catch { /* skip */ }
+    }
+
+    if (!data && msg.document && msg.document.fileName && msg.document.fileName.endsWith(".json")) {
+      try {
+        const bytes = await client.downloadMedia(msg);
+        data = JSON.parse(bytes.toString("utf-8"));
+      } catch { /* skip */ }
+    }
+
+    if (data && data.t === "meta" && data.id === videoId) {
+      return { ...data, _msgId: msg.id };
+    }
   }
   return null;
 }

@@ -1,68 +1,49 @@
-# Intimora Load Balancer
+# Intimora Cloudflare Load Balancer
 
-Cloudflare Worker that distributes traffic across multiple Netlify backend instances.
+**No KV, no env vars, no config — just paste and deploy!**
 
-## Features
+## Servers (hardcoded):
+1. `https://api-intimora.vercel.app`
+2. `https://intimora-api1.vercel.app`
 
-- **Least-connections routing** — sends requests to the server with the fewest requests
-- **Automatic health checks** — every 2 minutes, checks `/api/health` on each server
-- **Suspended server detection** — when Netlify credits run out, the server is auto-skipped
-- **KV-based state** — request counts and health status persist in Cloudflare KV
-- **Fallback round-robin** — if KV is unavailable, falls back to round-robin
-- **Video streaming support** — preserves Range headers for video playback
+---
 
-## Setup
+## Setup (2 minutes):
 
-### 1. Install Wrangler
+### 1. Cloudflare Dashboard kholo
+https://dash.cloudflare.com
 
-```bash
-npm install -g wrangler
+### 2. Workers & Pages → Create → Create Worker
+### 3. Code editor me pura code paste karo
+(`src/index.js` ka pura content)
+
+### 4. Deploy karo
+**Deploy** button pe click karo.
+
+**Done! No KV, no env vars, no bindings!**
+
+### 5. Test karo
 ```
-
-### 2. Create KV Namespace
-
-In Cloudflare dashboard:
-- Go to **Workers & Pages**
-- Click **KV** → **Create namespace**
-- Name: `intimora-lb`
-- Copy the namespace ID
-
-### 3. Edit wrangler.toml
-
-Replace `REPLACE_WITH_YOUR_KV_NAMESPACE_ID` with your actual KV namespace ID.
-
-Update the `SERVERS` variable with your Netlify deployment URLs:
-```toml
-SERVERS = "https://a-intimora.netlify.app,https://b-intimora.netlify.app,https://c-intimora.netlify.app"
+https://intimora-load-balancer.xxx.workers.dev/api/health
 ```
+Should return: `{"ok":true,"data":{"status":"up"}}`
 
-### 4. Deploy
+---
 
-```bash
-cd load-balancer
-wrangler deploy
+## Adding More Servers:
+`src/index.js` me `SERVERS` array me URL add karo:
+```javascript
+const SERVERS = [
+  "https://api-intimora.vercel.app",
+  "https://intimora-api1.vercel.app",
+  "https://third-intimora.vercel.app",
+];
 ```
+Phir redeploy karo.
 
-### 5. Test
-
-```bash
-curl https://YOUR_WORKER_NAME.workers.dev/api/health
-```
-
-Should return: `{"ok":true,"data":{"status":"up",...}}`
-
-## How it works
-
-```
-User → Cloudflare Worker → Server A (least used, healthy)
-                ↓
-         If Server A suspended (404/410/503)
-                ↓
-         Try Server B → Server C → ...
-```
-
-## Files
-
-- `src/index.js` — Worker code
-- `wrangler.toml` — Deployment config
-- `README.md` — This file
+## How It Works:
+- Round-robin: requests alternate between servers
+- Health check every 2 minutes
+- Dead servers (3 failed checks) suspended for 5 min
+- Auto-recovers when server comes back
+- No KV needed — all state in memory

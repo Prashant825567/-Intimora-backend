@@ -1,0 +1,15 @@
+{
+  "name": "intimora-local-admin",
+  "version": "1.0.0",
+  "description": "Local admin panel for uploading videos to Telegram via MTProto",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "teleproto": "^1.230.1",
+    "multer": "^2.0.0"
+  }
+}

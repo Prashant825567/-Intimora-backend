@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Intimora Local Admin</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: #0f0f0f; color: #e0e0e0; padding: 20px; }
+    .container { max-width: 500px; margin: 0 auto; }
+    h1 { font-size: 1.5rem; margin-bottom: 20px; color: #4fc3f7; }
+    .card { background: #1a1a1a; border-radius: 12px; padding: 20px; margin-bottom: 15px; }
+    label { display: block; font-size: 0.85rem; color: #aaa; margin-bottom: 4px; }
+    input, textarea {
+      width: 100%; padding: 10px 12px; background: #2a2a2a; border: 1px solid #333;
+      border-radius: 8px; color: #e0e0e0; font-size: 0.9rem; margin-bottom: 12px;
+    }
+    input:focus, textarea:focus { outline: none; border-color: #4fc3f7; }
+    button {
+      padding: 10px 20px; border: none; border-radius: 8px; font-size: 0.9rem;
+      cursor: pointer; font-weight: 600; transition: all 0.2s;
+    }
+    .btn-primary { background: #4fc3f7; color: #0f0f0f; }
+    .btn-primary:hover { background: #29b6f6; }
+    .btn-secondary { background: #333; color: #e0e0e0; }
+    .btn-secondary:hover { background: #444; }
+    .btn-danger { background: #ef5350; color: white; }
+    .btn-danger:hover { background: #e53935; }
+    .btn-sm { padding: 6px 12px; font-size: 0.8rem; }
+    .btn-group { display: flex; gap: 8px; flex-wrap: wrap; }
+    .status { padding: 10px 14px; border-radius: 8px; font-size: 0.85rem; margin-bottom: 12px; }
+    .status-success { background: #1b5e20; color: #a5d6a7; }
+    .status-error { background: #b71c1c; color: #ef9a9a; }
+    .status-info { background: #01579b; color: #90caf9; }
+    .status-loading { background: #4a3f00; color: #ffe082; }
+    .progress { height: 8px; background: #333; border-radius: 4px; overflow: hidden; margin-top: 8px; }
+    .progress-bar { height: 100%; background: #4fc3f7; transition: width 0.3s; width: 0%; }
+    .video-list { margin-top: 10px; }
+    .video-item {
+      background: #252525; border-radius: 8px; padding: 12px; margin-bottom: 8px;
+      display: flex; align-items: center; gap: 12px;
+    }
+    .video-item-info { flex: 1; }
+    .video-item-title { font-size: 0.9rem; font-weight: 600; }
+    .video-item-meta { font-size: 0.75rem; color: #888; }
+    .divider { height: 1px; background: #333; margin: 15px 0; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎬 Intimora Local Admin</h1>
+    <div id="status" class="status status-info" style="display:none;"></div>
+
+    <!-- Upload -->
+    <div class="card">
+      <h2 style="font-size:1.1rem;margin-bottom:15px;color:#81d4fa;">Upload Video</h2>
+      <label>Title</label>
+      <input type="text" id="title" placeholder="Video title">
+      <label>Description</label>
+      <textarea id="description" rows="2" placeholder="Video description"></textarea>
+      <label>Duration (seconds)</label>
+      <input type="number" id="duration" placeholder="e.g. 120">
+      <label>Video File</label>
+      <input type="file" id="videoFile" accept="video/*">
+      <label>Thumbnail (compulsory)</label>
+      <input type="file" id="thumbFile" accept="image/*">
+      <div class="progress" id="progressContainer" style="display:none;">
+        <div class="progress-bar" id="progressBar"></div>
+      </div>
+      <div class="btn-group" style="margin-top:10px;">
+        <button class="btn-primary" onclick="uploadVideo()">Upload to Telegram</button>
+      </div>
+    </div>
+
+    <!-- Video List -->
+    <div class="card">
+      <h2 style="font-size:1.1rem;margin-bottom:15px;color:#81d4fa;">Uploaded Videos</h2>
+      <div class="btn-group" style="margin-bottom:10px;">
+        <button class="btn-secondary btn-sm" onclick="loadVideos()">Refresh</button>
+        <button class="btn-secondary btn-sm" onclick="exportMetadata()">Export JSON</button>
+      </div>
+      <div class="video-list" id="videoList"></div>
+    </div>
+
+  </div>
+
+<script>
+function showStatus(msg, type = 'info') {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = `status status-${type}`;
+  el.style.display = 'block';
+  setTimeout(() => el.style.display = 'none', 8000);
+}
+
+async function loadVideos() {
+  try {
+    const res = await fetch('/api/videos');
+    const data = await res.json();
+    const list = document.getElementById('videoList');
+    const videos = data.data.videos || [];
+    if (videos.length === 0) {
+      list.innerHTML = '<p style="color:#888;padding:20px;">No videos uploaded yet</p>';
+      return;
+    }
+    list.innerHTML = videos.map(v => `
+      <div class="video-item">
+        <div class="video-item-info">
+          <div class="video-item-title">${v.title}</div>
+          <div class="video-item-meta">${(v.video?.tg_size / 1024).toFixed(1)} KB · ${new Date(v.createdAt * 1000).toLocaleDateString()}</div>
+        </div>
+        <button class="btn-danger btn-sm" onclick="deleteVideo('${v.id}')">Delete</button>
+      </div>
+    `).join('');
+  } catch (e) {
+    showStatus('Error loading videos: ' + e.message, 'error');
+  }
+}
+
+async function uploadVideo() {
+  const title = document.getElementById('title').value;
+  const description = document.getElementById('description').value;
+  const duration = document.getElementById('duration').value;
+  const videoFile = document.getElementById('videoFile').files[0];
+  const thumbFile = document.getElementById('thumbFile').files[0];
+
+  if (!title) { showStatus('Enter title', 'error'); return; }
+  if (!videoFile) { showStatus('Select video file', 'error'); return; }
+  if (!thumbFile) { showStatus('Thumbnail is compulsory', 'error'); return; }
+
+  showStatus('Uploading...', 'loading');
+  document.getElementById('progressContainer').style.display = 'block';
+  document.getElementById('progressBar').style.width = '30%';
+
+  try {
+    const formData = new FormData();
+    formData.append('title', title);
+    formData.append('description', description);
+    formData.append('duration', duration);
+    formData.append('video', videoFile);
+    formData.append('thumb', thumbFile);
+
+    const res = await fetch('/api/upload', { method: 'POST', body: formData });
+    const data = await res.json();
+
+    if (data.ok) {
+      document.getElementById('progressBar').style.width = '100%';
+      showStatus('Upload successful! ✅', 'success');
+      document.getElementById('title').value = '';
+      document.getElementById('description').value = '';
+      document.getElementById('duration').value = '';
+      document.getElementById('videoFile').value = '';
+      document.getElementById('thumbFile').value = '';
+      setTimeout(() => {
+        document.getElementById('progressContainer').style.display = 'none';
+        document.getElementById('progressBar').style.width = '0%';
+      }, 1000);
+      loadVideos();
+    } else {
+      showStatus('Error: ' + data.error, 'error');
+      document.getElementById('progressContainer').style.display = 'none';
+    }
+  } catch (e) {
+    showStatus('Error: ' + e.message, 'error');
+    document.getElementById('progressContainer').style.display = 'none';
+  }
+}
+
+async function deleteVideo(id) {
+  await fetch('/api/delete/' + id, { method: 'POST' });
+  showStatus('Deleted', 'info');
+  loadVideos();
+}
+
+function exportMetadata() {
+  fetch('/api/export').then(res => {
+    const disposition = res.headers.get('Content-Disposition');
+    const filename = 'intimora-metadata.json';
+    res.blob().then(blob => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      showStatus('Exported!', 'success');
+    });
+  });
+}
+
+loadVideos();
+</script>
+</body>
+</html>
