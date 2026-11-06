@@ -15,17 +15,6 @@
         { "key": "Access-Control-Max-Age", "value": "86400" },
         { "key": "Access-Control-Expose-Headers", "value": "Accept-Ranges, Content-Range, Content-Length, Content-Type, ETag" }
       ]
-    },
-    {
-      "source": "/api/(.*)",
-      "methods": ["OPTIONS"],
-      "headers": [
-        { "key": "Access-Control-Allow-Origin", "value": "https://intimora.new.tg" },
-        { "key": "Vary", "value": "Origin" },
-        { "key": "Access-Control-Allow-Methods", "value": "GET, POST, HEAD, OPTIONS" },
-        { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization, Range, If-Range" },
-        { "key": "Access-Control-Max-Age", "value": "86400" }
-      ]
     }
   ]
 }
