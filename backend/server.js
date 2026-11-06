@@ -12,6 +12,22 @@ const app = express();
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
+// ---- CORS middleware ----
+// Allow frontend to call APIs directly from browser
+app.use((req, res, next) => {
+  res.set({
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, X-API-Key, Authorization",
+    "Access-Control-Max-Age": "86400",
+    // Expose stream playback headers to frontend
+    "Access-Control-Expose-Headers": "Accept-Ranges, Content-Range, Content-Length, Content-Type, Content-Disposition",
+  });
+  // Handle OPTIONS preflight
+  if (req.method === "OPTIONS") return res.status(204).end();
+  next();
+});
+
 // ---- Path normalization for Netlify serverless ----
 // When Netlify routes to this function, the path may be:
 //   /api/health          (correct — from redirect rule)

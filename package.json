@@ -9,9 +9,9 @@
     "login": "node scripts/login.js"
   },
   "dependencies": {
-    "teleproto": "^1.230.1",
     "express": "^4.19.2",
-    "serverless-http": "^4.0.0"
+    "serverless-http": "^4.0.0",
+    "teleproto": "^1.230.1"
   },
   "engines": {
     "node": ">=20"

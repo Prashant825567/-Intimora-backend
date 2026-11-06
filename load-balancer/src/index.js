@@ -1,15 +1,18 @@
 /**
- * Cloudflare Worker — Simple Load Balancer for Vercel Backends
+ * Cloudflare Worker — Load Balancer for Vercel Backends
  * ------------------------------------------------------------------------------------
  * Round-robin load balancing across Vercel backends. No KV needed.
  *
- * Servers are hardcoded below — edit to add/remove.
- *
- * How it works:
- * - Alternates requests between servers (round-robin)
- * - Health checks every 2 minutes
- * - Dead servers (3 failed checks) skipped for 5 minutes
+ * Features:
+ * - Round-robin: requests alternate between servers
+ * - Health check every 2 minutes
+ * - Dead servers (3 failed checks) suspended for 5 min
  * - Auto-recovers when server comes back
+ * - X-Direct-Server-URL header: tells frontend which server handled the request
+ * - /api/servers endpoint: returns healthy server URLs
+ * - /api/get-server endpoint: returns a single healthy server URL
+ *
+ * Servers are hardcoded below — edit to add/remove.
  */
 
 // === Servers (edit here) ===
@@ -43,16 +46,19 @@ const STRIP_RESPONSE_HEADERS = new Set([
   "x-vercel-upstream",
 ]);
 
-// === Get next server (round-robin) ===
-function getNextServer() {
+// === Get healthy servers ===
+function getHealthyServers() {
   const now = Date.now();
-  const available = SERVERS.filter((s) => {
-    // Skip suspended servers
+  return SERVERS.filter((s) => {
     if (suspendedUntil[s] && suspendedUntil[s] > now) return false;
-    // Skip dead servers
     if (serverHealth[s] === false) return false;
     return true;
   });
+}
+
+// === Get next server (round-robin) ===
+function getNextServer() {
+  const available = getHealthyServers();
 
   if (available.length === 0) {
     // All dead — return any server (let it fail naturally)
@@ -106,19 +112,17 @@ async function healthCheck() {
     const { url, alive } = result.value;
 
     if (alive) {
-      // Server is alive — reset streak, mark healthy
       failStreaks[url] = 0;
       serverHealth[url] = true;
       delete suspendedUntil[url];
       console.log(`${url} ✅ ALIVE`);
     } else {
-      // Server failed — increment streak
       failStreaks[url] = (failStreaks[url] || 0) + 1;
       console.log(`${url} ❌ failed (${failStreaks[url]}/3)`);
 
       if (failStreaks[url] >= 3) {
         serverHealth[url] = false;
-        suspendedUntil[url] = Date.now() + 5 * 60 * 1000; // suspend for 5 min
+        suspendedUntil[url] = Date.now() + 5 * 60 * 1000;
         console.log(`${url} 🔴 SUSPENDED for 5 min`);
       }
     }
@@ -136,11 +140,14 @@ function buildForwardHeaders(request) {
   return headers;
 }
 
-function sanitizeResponseHeaders(response) {
+function sanitizeResponseHeaders(response, serverUrl) {
   const headers = new Headers(response.headers);
   for (const name of STRIP_RESPONSE_HEADERS) {
     headers.delete(name);
   }
+  // Add direct server URL header so frontend can use it for media requests
+  headers.set("X-Direct-Server-URL", serverUrl);
+  headers.set("Access-Control-Allow-Origin", "*");
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,
@@ -166,7 +173,6 @@ async function forwardRequest(request, serverUrl, bodyBuffer) {
     });
 
     // If server returns 404/410/503 on API routes, mark as dead
-    // (don't mark dead for non-API routes like /favicon.ico)
     const url = new URL(request.url);
     if (url.pathname.startsWith("/api/") && [404, 410, 503].includes(response.status)) {
       console.warn(`${serverUrl} returned ${response.status} on ${url.pathname} — marking dead`);
@@ -174,7 +180,7 @@ async function forwardRequest(request, serverUrl, bodyBuffer) {
       suspendedUntil[serverUrl] = Date.now() + 5 * 60 * 1000;
     }
 
-    return sanitizeResponseHeaders(response);
+    return sanitizeResponseHeaders(response, serverUrl);
   } finally {
     clearTimeout(timeoutId);
   }
@@ -191,7 +197,61 @@ async function readBodyIfPresent(request) {
   }
 }
 
+// === Special endpoints ===
+
+// GET /api/servers — returns list of healthy server URLs
+async function handleServersEndpoint() {
+  const healthy = getHealthyServers();
+  return new Response(
+    JSON.stringify({ ok: true, data: { servers: healthy } }),
+    {
+      status: 200,
+      headers: {
+        "content-type": "application/json",
+        "Access-Control-Allow-Origin": "*",
+      },
+    }
+  );
+}
+
+// GET /api/get-server — returns a single healthy server URL
+async function handleGetServerEndpoint() {
+  const healthy = getHealthyServers();
+  if (healthy.length === 0) {
+    return new Response(
+      JSON.stringify({ ok: false, error: "No servers available" }),
+      {
+        status: 503,
+        headers: { "content-type": "application/json" },
+      }
+    );
+  }
+  const server = healthy[roundRobinCursor % healthy.length];
+  roundRobinCursor++;
+  return new Response(
+    JSON.stringify({ ok: true, data: { server: server } }),
+    {
+      status: 200,
+      headers: {
+        "content-type": "application/json",
+        "Access-Control-Allow-Origin": "*",
+      },
+    }
+  );
+}
+
+// === Main routing ===
 async function routeRequest(request) {
+  const url = new URL(request.url);
+
+  // Special endpoints — handle directly, don't forward
+  if (url.pathname === "/api/servers" && request.method === "GET") {
+    return await handleServersEndpoint();
+  }
+  if (url.pathname === "/api/get-server" && request.method === "GET") {
+    return await handleGetServerEndpoint();
+  }
+
   const bodyBuffer = await readBodyIfPresent(request);
 
   // Try up to SERVERS.length times
@@ -202,15 +262,13 @@ async function routeRequest(request) {
       const response = await forwardRequest(request, serverUrl, bodyBuffer);
 
       // Check if suspended response on API route
-      const reqUrl = new URL(request.url);
-      if (reqUrl.pathname.startsWith("/api/") && [404, 410, 503].includes(response.status)) {
+      if (url.pathname.startsWith("/api/") && [404, 410, 503].includes(response.status)) {
         continue; // try next server
       }
 
       return response;
     } catch (err) {
       console.error(`Request to ${serverUrl} failed:`, err.message);
-      // Mark server as dead
       serverHealth[serverUrl] = false;
       suspendedUntil[serverUrl] = Date.now() + 5 * 60 * 1000;
       continue;

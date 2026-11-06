@@ -1,0 +1,20 @@
+name: Sync to Second Repo
+on:
+  push:
+    branches: [main]
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Sync to second repo
+        env:
+          TOKEN: ${{ secrets.SECOND_REPO_TOKEN }}
+        run: |
+          git remote add second https://x-access-token:${TOKEN}@github.com/omendrasingh806-afk/-Intimora-backend.git
+          git push second main --force
