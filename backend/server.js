@@ -13,17 +13,28 @@ app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
 // ---- CORS middleware ----
-// Allow frontend to call APIs directly from browser
+// Allow specific frontend origins to call APIs directly from browser
+const ALLOWED_ORIGINS = [
+  "https://intimora.new.tg",
+  "http://localhost:5173",
+];
+// Also allow Vercel deployment URLs and custom domain
+const vercelUrl = process.env.VERCEL_URL;
+if (vercelUrl) ALLOWED_ORIGINS.push(`https://${vercelUrl}`);
+
 app.use((req, res, next) => {
-  res.set({
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, X-API-Key, Authorization",
-    "Access-Control-Max-Age": "86400",
-    // Expose stream playback headers to frontend
-    "Access-Control-Expose-Headers": "Accept-Ranges, Content-Range, Content-Length, Content-Type, Content-Disposition",
-  });
-  // Handle OPTIONS preflight
+  const origin = req.headers.origin;
+  if (origin && (ALLOWED_ORIGINS.includes(origin) || ALLOWED_ORIGINS.includes(origin.replace(/^https?:\/\//, 'https://')))) {
+    res.set({
+      "Access-Control-Allow-Origin": origin,
+      "Vary": "Origin",
+      "Access-Control-Allow-Methods": "GET, POST, HEAD, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization, Range, If-Range",
+      "Access-Control-Max-Age": "86400",
+      "Access-Control-Expose-Headers": "Accept-Ranges, Content-Range, Content-Length, Content-Type, ETag",
+    });
+  }
+  // Handle OPTIONS preflight — empty 204, no HTML
   if (req.method === "OPTIONS") return res.status(204).end();
   next();
 });
@@ -128,6 +139,7 @@ app.get("/api/videos/:id/thumbnail", async (req, res) => {
     if (!img) return fail(res, "No thumbnail", 404);
     res.set("Content-Type", "image/jpeg");
     res.set("Cache-Control", "public, max-age=86400");
+    res.set("Cross-Origin-Resource-Policy", "cross-origin");
     res.send(img);
   } catch (e) {
     fail(res, e.message, 500);
@@ -161,7 +173,7 @@ app.get("/api/videos/:id/stream", async (req, res) => {
       "Content-Length": end - start + 1,
       "Content-Disposition": "inline",
       "Cache-Control": "no-store",
-      "Cross-Origin-Resource-Policy": "same-origin",
+      "Cross-Origin-Resource-Policy": "cross-origin",
     });
     if (status === 206) res.set("Content-Range", `bytes ${start}-${end}/${streamFormat.tg_size}`);
 
