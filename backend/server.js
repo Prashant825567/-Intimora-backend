@@ -18,7 +18,6 @@ const ALLOWED_ORIGINS = [
   "https://intimora.new.tg",
   "http://localhost:5173",
 ];
-// Also allow Vercel deployment URLs and custom domain
 const vercelUrl = process.env.VERCEL_URL;
 if (vercelUrl) ALLOWED_ORIGINS.push(`https://${vercelUrl}`);
 
