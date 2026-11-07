@@ -69,9 +69,14 @@
       <input type="file" id="videoFile" accept="video/*">
       <label>Thumbnail (compulsory)</label>
       <input type="file" id="thumbFile" accept="image/*">
-      <div class="progress" id="progressContainer" style="display:none;">
-        <div class="progress-bar" id="progressBar"></div>
-        <div id="progressInfo" style="font-size:0.75rem;color:#888;margin-top:6px;"></div>
+      <div class="progress" id="progressContainer" style="display:none;background:#2a2a2a;border-radius:8px;padding:12px;margin-top:10px;">
+        <div style="display:flex;justify-content:space-between;font-size:0.8rem;margin-bottom:6px;">
+          <span style="color:#aaa;">Upload Progress</span>
+          <span id="progressPercent" style="color:#4fc3f7;font-weight:600;">0%</span>
+        </div>
+        <div class="progress-bar" id="progressBar" style="height:12px;"></div>
+        <div id="progressInfo" style="font-size:0.75rem;color:#888;margin-top:8px;"></div>
+        <div id="progressStats" style="display:flex;justify-content:space-between;font-size:0.7rem;color:#666;margin-top:4px;"></div>
       </div>
       <div class="btn-group" style="margin-top:10px;">
         <button class="btn-primary" onclick="uploadVideo()">Upload to Telegram</button>
@@ -138,10 +143,11 @@ async function uploadVideo() {
   showStatus('Uploading...', 'loading');
   document.getElementById('progressContainer').style.display = 'block';
   document.getElementById('progressBar').style.width = '5%';
+  document.getElementById('progressPercent').textContent = '5%';
 
   // Live progress tracking
-  const totalSize = videoFile.size + (thumbFile ? thumbFile.size : 0);
   const progressInfo = document.getElementById('progressInfo');
+  const progressStats = document.getElementById('progressStats');
   const startTime = Date.now();
   let uploadedSize = 0;
 
@@ -161,11 +167,15 @@ async function uploadVideo() {
     if (e.lengthComputable) {
       const percent = Math.round((e.loaded / e.total) * 100);
       document.getElementById('progressBar').style.width = percent + '%';
+      document.getElementById('progressPercent').textContent = percent + '%';
       uploadedSize = e.loaded;
       const elapsed = (Date.now() - startTime) / 1000;
       const speed = elapsed > 0 ? uploadedSize / elapsed : 0;
       const speedStr = speed > 1024 * 1024 ? (speed / 1024 / 1024).toFixed(2) + ' MB/s' : (speed / 1024).toFixed(2) + ' KB/s';
-      progressInfo.textContent = `${percent}% · ${formatBytes(uploadedSize)} / ${formatBytes(e.total)} · ${speedStr}`;
+      const remaining = e.total - e.loaded;
+      const eta = speed > 0 ? Math.round(remaining / speed) : 0;
+      progressInfo.textContent = `${formatBytes(uploadedSize)} / ${formatBytes(e.total)}`;
+      progressStats.innerHTML = `<span>Speed: ${speedStr}</span><span>ETA: ${eta}s</span>`;
     }
   };
 
