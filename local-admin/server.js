@@ -142,6 +142,7 @@ app.post('/api/upload', upload.fields([
       id: `local-${Date.now()}`,
       title: title,
       description: description || '',
+      exclusive: req.body.exclusive === 'true' || req.body.exclusive === true,
       views: 0,
       likes: 0,
       shares: 0,

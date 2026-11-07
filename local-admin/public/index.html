@@ -60,12 +60,18 @@
       <textarea id="description" rows="2" placeholder="Video description"></textarea>
       <label>Duration (seconds)</label>
       <input type="number" id="duration" placeholder="e.g. 120">
+      <label>Exclusive Content</label>
+      <select id="exclusive" style="width:100%;padding:10px 12px;background:#2a2a2a;border:1px solid #333;border-radius:8px;color:#e0e0e0;font-size:0.9rem;margin-bottom:12px;">
+        <option value="false">Non-Exclusive (Public)</option>
+        <option value="true">Exclusive (Premium)</option>
+      </select>
       <label>Video File</label>
       <input type="file" id="videoFile" accept="video/*">
       <label>Thumbnail (compulsory)</label>
       <input type="file" id="thumbFile" accept="image/*">
       <div class="progress" id="progressContainer" style="display:none;">
         <div class="progress-bar" id="progressBar"></div>
+        <div id="progressInfo" style="font-size:0.75rem;color:#888;margin-top:6px;"></div>
       </div>
       <div class="btn-group" style="margin-top:10px;">
         <button class="btn-primary" onclick="uploadVideo()">Upload to Telegram</button>
@@ -106,8 +112,8 @@ async function loadVideos() {
     list.innerHTML = videos.map(v => `
       <div class="video-item">
         <div class="video-item-info">
-          <div class="video-item-title">${v.title}</div>
-          <div class="video-item-meta">${(v.video?.tg_size / 1024).toFixed(1)} KB · ${new Date(v.createdAt * 1000).toLocaleDateString()}</div>
+          <div class="video-item-title">${v.title} ${v.exclusive ? '🔒' : ''}</div>
+          <div class="video-item-meta">${v.exclusive ? 'Exclusive' : 'Public'} · ${(v.video?.tg_size / 1024).toFixed(1)} KB · ${new Date(v.createdAt * 1000).toLocaleDateString()}</div>
         </div>
         <button class="btn-danger btn-sm" onclick="deleteVideo('${v.id}')">Delete</button>
       </div>
@@ -121,6 +127,7 @@ async function uploadVideo() {
   const title = document.getElementById('title').value;
   const description = document.getElementById('description').value;
   const duration = document.getElementById('duration').value;
+  const exclusive = document.getElementById('exclusive').value;
   const videoFile = document.getElementById('videoFile').files[0];
   const thumbFile = document.getElementById('thumbFile').files[0];
 
@@ -130,40 +137,81 @@ async function uploadVideo() {
 
   showStatus('Uploading...', 'loading');
   document.getElementById('progressContainer').style.display = 'block';
-  document.getElementById('progressBar').style.width = '30%';
+  document.getElementById('progressBar').style.width = '5%';
 
-  try {
-    const formData = new FormData();
-    formData.append('title', title);
-    formData.append('description', description);
-    formData.append('duration', duration);
-    formData.append('video', videoFile);
-    formData.append('thumb', thumbFile);
+  // Live progress tracking
+  const totalSize = videoFile.size + (thumbFile ? thumbFile.size : 0);
+  const progressInfo = document.getElementById('progressInfo');
+  const startTime = Date.now();
+  let uploadedSize = 0;
 
-    const res = await fetch('/api/upload', { method: 'POST', body: formData });
-    const data = await res.json();
+  const formData = new FormData();
+  formData.append('title', title);
+  formData.append('description', description);
+  formData.append('duration', duration);
+  formData.append('exclusive', exclusive);
+  formData.append('video', videoFile);
+  formData.append('thumb', thumbFile);
 
-    if (data.ok) {
-      document.getElementById('progressBar').style.width = '100%';
-      showStatus('Upload successful! ✅', 'success');
-      document.getElementById('title').value = '';
-      document.getElementById('description').value = '';
-      document.getElementById('duration').value = '';
-      document.getElementById('videoFile').value = '';
-      document.getElementById('thumbFile').value = '';
-      setTimeout(() => {
+  // Use XMLHttpRequest for progress events
+  const xhr = new XMLHttpRequest();
+  xhr.open('POST', '/api/upload');
+
+  xhr.upload.onprogress = (e) => {
+    if (e.lengthComputable) {
+      const percent = Math.round((e.loaded / e.total) * 100);
+      document.getElementById('progressBar').style.width = percent + '%';
+      uploadedSize = e.loaded;
+      const elapsed = (Date.now() - startTime) / 1000;
+      const speed = elapsed > 0 ? uploadedSize / elapsed : 0;
+      const speedStr = speed > 1024 * 1024 ? (speed / 1024 / 1024).toFixed(2) + ' MB/s' : (speed / 1024).toFixed(2) + ' KB/s';
+      progressInfo.textContent = `${percent}% · ${formatBytes(uploadedSize)} / ${formatBytes(e.total)} · ${speedStr}`;
+    }
+  };
+
+  xhr.onload = () => {
+    try {
+      const data = JSON.parse(xhr.responseText);
+      if (data.ok) {
+        document.getElementById('progressBar').style.width = '100%';
+        progressInfo.textContent = 'Upload complete! ✅';
+        showStatus('Upload successful! ✅', 'success');
+        document.getElementById('title').value = '';
+        document.getElementById('description').value = '';
+        document.getElementById('duration').value = '';
+        document.getElementById('exclusive').value = 'false';
+        document.getElementById('videoFile').value = '';
+        document.getElementById('thumbFile').value = '';
+        setTimeout(() => {
+          document.getElementById('progressContainer').style.display = 'none';
+          document.getElementById('progressBar').style.width = '0%';
+          progressInfo.textContent = '';
+        }, 1500);
+        loadVideos();
+      } else {
+        showStatus('Error: ' + data.error, 'error');
         document.getElementById('progressContainer').style.display = 'none';
-        document.getElementById('progressBar').style.width = '0%';
-      }, 1000);
-      loadVideos();
-    } else {
-      showStatus('Error: ' + data.error, 'error');
+      }
+    } catch (e) {
+      showStatus('Error: ' + e.message, 'error');
       document.getElementById('progressContainer').style.display = 'none';
     }
-  } catch (e) {
-    showStatus('Error: ' + e.message, 'error');
+  };
+
+  xhr.onerror = () => {
+    showStatus('Network error during upload', 'error');
     document.getElementById('progressContainer').style.display = 'none';
-  }
+  };
+
+  xhr.send(formData);
+}
+
+function formatBytes(bytes) {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
 async function deleteVideo(id) {

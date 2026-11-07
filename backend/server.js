@@ -68,6 +68,7 @@ function publicVideo(v) {
     id: v.id,
     title: v.title,
     description: v.description,
+    exclusive: v.exclusive === true || v.exclusive === 'true',
     size: v.video?.size,
     mime: v.video?.mime,
     thumbSize: v.thumbnail?.size,
