@@ -170,7 +170,8 @@ async function uploadThumbnail(imagePath) {
 // Telegram stores files as 512 KB parts. With precise:false we fetch part-aligned
 // ranges (contiguous, exact bytes) and discard any misaligned head. This gives a
 // correct HTTP Range response for the <video> element.
-const PART = 512 * 1024;
+// Increased PART to 2MB for faster streaming — fewer Telegram API calls per range request.
+const PART = 2 * 1024 * 1024;
 
 function makeDocLocation(docId, accessHash, fileRef, thumbSize = "") {
   return new Api.InputDocumentFileLocation({
@@ -277,7 +278,7 @@ async function* streamRange(video, start, end) {
     parts.push({ offset, limit: Math.min(PART, end - offset + 1) });
   }
 
-  const POOL = 4;
+  const POOL = 8;
   for (let i = 0; i < parts.length; i += POOL) {
     const batch = parts.slice(i, i + POOL);
     const results = await Promise.all(

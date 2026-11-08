@@ -172,7 +172,7 @@ app.get("/api/videos/:id/stream", async (req, res) => {
       "Accept-Ranges": "bytes",
       "Content-Length": end - start + 1,
       "Content-Disposition": "inline",
-      "Cache-Control": "no-store",
+      "Cache-Control": "public, max-age=3600",
       "Cross-Origin-Resource-Policy": "cross-origin",
     });
     if (status === 206) res.set("Content-Range", `bytes ${start}-${end}/${streamFormat.tg_size}`);
