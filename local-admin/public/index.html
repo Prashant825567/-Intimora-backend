@@ -6,44 +6,187 @@
   <title>Intimora Local Admin</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: system-ui, -apple-system, sans-serif; background: #0f0f0f; color: #e0e0e0; padding: 20px; }
-    .container { max-width: 500px; margin: 0 auto; }
-    h1 { font-size: 1.5rem; margin-bottom: 20px; color: #4fc3f7; }
-    .card { background: #1a1a1a; border-radius: 12px; padding: 20px; margin-bottom: 15px; }
-    label { display: block; font-size: 0.85rem; color: #aaa; margin-bottom: 4px; }
-    input, textarea {
-      width: 100%; padding: 10px 12px; background: #2a2a2a; border: 1px solid #333;
-      border-radius: 8px; color: #e0e0e0; font-size: 0.9rem; margin-bottom: 12px;
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%);
+      color: #e0e0e0;
+      padding: 20px;
+      min-height: 100vh;
     }
-    input:focus, textarea:focus { outline: none; border-color: #4fc3f7; }
+    .container { max-width: 600px; margin: 0 auto; }
+    h1 {
+      font-size: 1.8rem;
+      margin-bottom: 25px;
+      background: linear-gradient(90deg, #4fc3f7, #81d4fa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .card {
+      background: rgba(26, 26, 26, 0.9);
+      border: 1px solid #333;
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 20px;
+      backdrop-filter: blur(10px);
+    }
+    .card-title {
+      font-size: 1.2rem;
+      margin-bottom: 20px;
+      color: #81d4fa;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    label {
+      display: block;
+      font-size: 0.85rem;
+      color: #aaa;
+      margin-bottom: 6px;
+      font-weight: 500;
+    }
+    input, textarea, select {
+      width: 100%;
+      padding: 12px 14px;
+      background: #2a2a2a;
+      border: 1px solid #3a3a3a;
+      border-radius: 10px;
+      color: #e0e0e0;
+      font-size: 0.9rem;
+      margin-bottom: 16px;
+      transition: border-color 0.2s;
+    }
+    input:focus, textarea:focus, select:focus {
+      outline: none;
+      border-color: #4fc3f7;
+    }
+    input[type="file"] {
+      padding: 10px;
+      border: 2px dashed #444;
+      cursor: pointer;
+    }
+    input[type="file"]::file-selector-button {
+      padding: 8px 16px;
+      background: #333;
+      border: none;
+      border-radius: 8px;
+      color: #e0e0e0;
+      cursor: pointer;
+      margin-right: 12px;
+    }
     button {
-      padding: 10px 20px; border: none; border-radius: 8px; font-size: 0.9rem;
-      cursor: pointer; font-weight: 600; transition: all 0.2s;
+      padding: 12px 24px;
+      border: none;
+      border-radius: 10px;
+      font-size: 0.95rem;
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.2s;
     }
-    .btn-primary { background: #4fc3f7; color: #0f0f0f; }
-    .btn-primary:hover { background: #29b6f6; }
+    .btn-primary {
+      background: linear-gradient(135deg, #4fc3f7, #29b6f6);
+      color: #0f0f0f;
+    }
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(79,195,247,0.3); }
     .btn-secondary { background: #333; color: #e0e0e0; }
     .btn-secondary:hover { background: #444; }
     .btn-danger { background: #ef5350; color: white; }
     .btn-danger:hover { background: #e53935; }
-    .btn-sm { padding: 6px 12px; font-size: 0.8rem; }
-    .btn-group { display: flex; gap: 8px; flex-wrap: wrap; }
-    .status { padding: 10px 14px; border-radius: 8px; font-size: 0.85rem; margin-bottom: 12px; }
+    .btn-sm { padding: 8px 14px; font-size: 0.8rem; }
+    .btn-group { display: flex; gap: 10px; flex-wrap: wrap; }
+    .status {
+      padding: 12px 16px;
+      border-radius: 10px;
+      font-size: 0.85rem;
+      margin-bottom: 16px;
+    }
     .status-success { background: #1b5e20; color: #a5d6a7; }
     .status-error { background: #b71c1c; color: #ef9a9a; }
     .status-info { background: #01579b; color: #90caf9; }
     .status-loading { background: #4a3f00; color: #ffe082; }
-    .progress { height: 8px; background: #333; border-radius: 4px; overflow: hidden; margin-top: 8px; }
-    .progress-bar { height: 100%; background: #4fc3f7; transition: width 0.3s; width: 0%; }
+
+    /* Progress */
+    .progress-container {
+      background: #1e1e1e;
+      border: 1px solid #333;
+      border-radius: 12px;
+      padding: 20px;
+      margin-top: 16px;
+      display: none;
+    }
+    .progress-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .progress-label { font-size: 0.9rem; color: #aaa; font-weight: 500; }
+    .progress-percent {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: #4fc3f7;
+    }
+    .progress-bar-bg {
+      height: 16px;
+      background: #2a2a2a;
+      border-radius: 8px;
+      overflow: hidden;
+      margin-bottom: 14px;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #4fc3f7, #29b6f6);
+      border-radius: 8px;
+      transition: width 0.3s ease;
+      width: 0%;
+    }
+    .progress-stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-top: 14px;
+    }
+    .stat-box {
+      background: #2a2a2a;
+      border-radius: 8px;
+      padding: 12px;
+      text-align: center;
+    }
+    .stat-label { font-size: 0.7rem; color: #666; margin-bottom: 4px; }
+    .stat-value { font-size: 0.95rem; color: #e0e0e0; font-weight: 600; }
+    .stat-value.speed { color: #4fc3f7; }
+    .stat-value.eta { color: #ffb74d; }
+    .stat-value.size { color: #81c784; }
+
+    /* Video List */
     .video-list { margin-top: 10px; }
     .video-item {
-      background: #252525; border-radius: 8px; padding: 12px; margin-bottom: 8px;
-      display: flex; align-items: center; gap: 12px;
+      background: #252525;
+      border: 1px solid #333;
+      border-radius: 10px;
+      padding: 14px;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      transition: border-color 0.2s;
     }
+    .video-item:hover { border-color: #4fc3f7; }
     .video-item-info { flex: 1; }
-    .video-item-title { font-size: 0.9rem; font-weight: 600; }
-    .video-item-meta { font-size: 0.75rem; color: #888; }
-    .divider { height: 1px; background: #333; margin: 15px 0; }
+    .video-item-title { font-size: 0.95rem; font-weight: 600; }
+    .video-item-meta { font-size: 0.75rem; color: #888; margin-top: 3px; }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      margin-left: 6px;
+    }
+    .badge-exclusive { background: #4a148c; color: #ce93d8; }
+    .badge-public { background: #1b5e20; color: #a5d6a7; }
+    .divider { height: 1px; background: #333; margin: 20px 0; }
+    .empty { text-align: center; color: #666; padding: 30px; }
   </style>
 </head>
 <body>
@@ -53,7 +196,7 @@
 
     <!-- Upload -->
     <div class="card">
-      <h2 style="font-size:1.1rem;margin-bottom:15px;color:#81d4fa;">Upload Video</h2>
+      <div class="card-title">⬆️ Upload Video</div>
       <label>Title</label>
       <input type="text" id="title" placeholder="Video title">
       <label>Description</label>
@@ -61,38 +204,53 @@
       <label>Duration (seconds)</label>
       <input type="number" id="duration" placeholder="e.g. 120">
       <label>Exclusive Content</label>
-      <select id="exclusive" style="width:100%;padding:10px 12px;background:#2a2a2a;border:1px solid #333;border-radius:8px;color:#e0e0e0;font-size:0.9rem;margin-bottom:12px;">
+      <select id="exclusive">
         <option value="false">Non-Exclusive (Public)</option>
-        <option value="true">Exclusive (Premium)</option>
+        <option value="true">Exclusive (Premium) 🔒</option>
       </select>
       <label>Video File</label>
       <input type="file" id="videoFile" accept="video/*">
       <label>Thumbnail (compulsory)</label>
       <input type="file" id="thumbFile" accept="image/*">
-      <div class="progress" id="progressContainer" style="display:none;background:#2a2a2a;border-radius:8px;padding:12px;margin-top:10px;">
-        <div style="display:flex;justify-content:space-between;font-size:0.8rem;margin-bottom:6px;">
-          <span style="color:#aaa;">Upload Progress</span>
-          <span id="progressPercent" style="color:#4fc3f7;font-weight:600;">0%</span>
+
+      <div class="progress-container" id="progressContainer">
+        <div class="progress-header">
+          <span class="progress-label">Upload Progress</span>
+          <span class="progress-percent" id="progressPercent">0%</span>
         </div>
-        <div class="progress-bar" id="progressBar" style="height:12px;"></div>
-        <div id="progressInfo" style="font-size:0.75rem;color:#888;margin-top:8px;"></div>
-        <div id="progressStats" style="display:flex;justify-content:space-between;font-size:0.7rem;color:#666;margin-top:4px;"></div>
+        <div class="progress-bar-bg">
+          <div class="progress-bar-fill" id="progressBar"></div>
+        </div>
+        <div class="progress-stats">
+          <div class="stat-box">
+            <div class="stat-label">Uploaded</div>
+            <div class="stat-value size" id="statSize">0 B</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">Speed</div>
+            <div class="stat-value speed" id="statSpeed">—</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">ETA</div>
+            <div class="stat-value eta" id="statEta">—</div>
+          </div>
+        </div>
       </div>
-      <div class="btn-group" style="margin-top:10px;">
+
+      <div class="btn-group" style="margin-top:20px;">
         <button class="btn-primary" onclick="uploadVideo()">Upload to Telegram</button>
       </div>
     </div>
 
     <!-- Video List -->
     <div class="card">
-      <h2 style="font-size:1.1rem;margin-bottom:15px;color:#81d4fa;">Uploaded Videos</h2>
-      <div class="btn-group" style="margin-bottom:10px;">
+      <div class="card-title">📋 Uploaded Videos</div>
+      <div class="btn-group" style="margin-bottom:16px;">
         <button class="btn-secondary btn-sm" onclick="loadVideos()">Refresh</button>
         <button class="btn-secondary btn-sm" onclick="exportMetadata()">Export JSON</button>
       </div>
       <div class="video-list" id="videoList"></div>
     </div>
-
   </div>
 
 <script>
@@ -104,6 +262,14 @@ function showStatus(msg, type = 'info') {
   setTimeout(() => el.style.display = 'none', 8000);
 }
 
+function formatBytes(bytes) {
+  if (!bytes || bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
 async function loadVideos() {
   try {
     const res = await fetch('/api/videos');
@@ -111,14 +277,14 @@ async function loadVideos() {
     const list = document.getElementById('videoList');
     const videos = data.data.videos || [];
     if (videos.length === 0) {
-      list.innerHTML = '<p style="color:#888;padding:20px;">No videos uploaded yet</p>';
+      list.innerHTML = '<div class="empty">No videos uploaded yet</div>';
       return;
     }
     list.innerHTML = videos.map(v => `
       <div class="video-item">
         <div class="video-item-info">
-          <div class="video-item-title">${v.title} ${v.exclusive ? '🔒' : ''}</div>
-          <div class="video-item-meta">${v.exclusive ? 'Exclusive' : 'Public'} · ${(v.video?.tg_size / 1024).toFixed(1)} KB · ${new Date(v.createdAt * 1000).toLocaleDateString()}</div>
+          <div class="video-item-title">${v.title} ${v.exclusive ? '<span class="badge badge-exclusive">🔒 Exclusive</span>' : '<span class="badge badge-public">Public</span>'}</div>
+          <div class="video-item-meta">${(v.video?.tg_size / 1024).toFixed(1)} KB · ${v.duration || 0}s · ${new Date(v.createdAt * 1000).toLocaleDateString()}</div>
         </div>
         <button class="btn-danger btn-sm" onclick="deleteVideo('${v.id}')">Delete</button>
       </div>
@@ -145,12 +311,6 @@ async function uploadVideo() {
   document.getElementById('progressBar').style.width = '5%';
   document.getElementById('progressPercent').textContent = '5%';
 
-  // Live progress tracking
-  const progressInfo = document.getElementById('progressInfo');
-  const progressStats = document.getElementById('progressStats');
-  const startTime = Date.now();
-  let uploadedSize = 0;
-
   const formData = new FormData();
   formData.append('title', title);
   formData.append('description', description);
@@ -159,23 +319,23 @@ async function uploadVideo() {
   formData.append('video', videoFile);
   formData.append('thumb', thumbFile);
 
-  // Use XMLHttpRequest for progress events
   const xhr = new XMLHttpRequest();
   xhr.open('POST', '/api/upload');
+  const startTime = Date.now();
 
   xhr.upload.onprogress = (e) => {
     if (e.lengthComputable) {
       const percent = Math.round((e.loaded / e.total) * 100);
       document.getElementById('progressBar').style.width = percent + '%';
       document.getElementById('progressPercent').textContent = percent + '%';
-      uploadedSize = e.loaded;
       const elapsed = (Date.now() - startTime) / 1000;
-      const speed = elapsed > 0 ? uploadedSize / elapsed : 0;
+      const speed = elapsed > 0 ? e.loaded / elapsed : 0;
       const speedStr = speed > 1024 * 1024 ? (speed / 1024 / 1024).toFixed(2) + ' MB/s' : (speed / 1024).toFixed(2) + ' KB/s';
       const remaining = e.total - e.loaded;
       const eta = speed > 0 ? Math.round(remaining / speed) : 0;
-      progressInfo.textContent = `${formatBytes(uploadedSize)} / ${formatBytes(e.total)}`;
-      progressStats.innerHTML = `<span>Speed: ${speedStr}</span><span>ETA: ${eta}s</span>`;
+      document.getElementById('statSize').textContent = formatBytes(e.loaded) + ' / ' + formatBytes(e.total);
+      document.getElementById('statSpeed').textContent = speedStr;
+      document.getElementById('statEta').textContent = eta + 's';
     }
   };
 
@@ -184,7 +344,9 @@ async function uploadVideo() {
       const data = JSON.parse(xhr.responseText);
       if (data.ok) {
         document.getElementById('progressBar').style.width = '100%';
-        progressInfo.textContent = 'Upload complete! ✅';
+        document.getElementById('progressPercent').textContent = '100%';
+        document.getElementById('statSpeed').textContent = 'Done!';
+        document.getElementById('statEta').textContent = '✓';
         showStatus('Upload successful! ✅', 'success');
         document.getElementById('title').value = '';
         document.getElementById('description').value = '';
@@ -195,8 +357,11 @@ async function uploadVideo() {
         setTimeout(() => {
           document.getElementById('progressContainer').style.display = 'none';
           document.getElementById('progressBar').style.width = '0%';
-          progressInfo.textContent = '';
-        }, 1500);
+          document.getElementById('progressPercent').textContent = '0%';
+          document.getElementById('statSize').textContent = '0 B';
+          document.getElementById('statSpeed').textContent = '—';
+          document.getElementById('statEta').textContent = '—';
+        }, 2000);
         loadVideos();
       } else {
         showStatus('Error: ' + data.error, 'error');
@@ -216,14 +381,6 @@ async function uploadVideo() {
   xhr.send(formData);
 }
 
-function formatBytes(bytes) {
-  if (bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-}
-
 async function deleteVideo(id) {
   await fetch('/api/delete/' + id, { method: 'POST' });
   showStatus('Deleted', 'info');
@@ -232,7 +389,6 @@ async function deleteVideo(id) {
 
 function exportMetadata() {
   fetch('/api/export').then(res => {
-    const disposition = res.headers.get('Content-Disposition');
     const filename = 'intimora-metadata.json';
     res.blob().then(blob => {
       const url = URL.createObjectURL(blob);
