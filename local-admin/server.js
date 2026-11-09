@@ -9,6 +9,43 @@ const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { execSync, exec } = require('child_process');
+
+// === FFmpeg Check & Auto-Install ===
+let ffmpegAvailable = false;
+
+function checkFFmpeg() {
+  try {
+    execSync('ffmpeg -version', { stdio: 'pipe' });
+    ffmpegAvailable = true;
+    console.log('✅ ffmpeg found');
+  } catch {
+    ffmpegAvailable = false;
+    console.log('⚠️ ffmpeg not found — attempting install...');
+    try {
+      // Try common install commands
+      const os = require('os');
+      const platform = os.platform();
+      if (platform === 'win32') {
+        execSync('winget install ffmpeg -y', { stdio: 'inherit' });
+      } else if (platform === 'darwin') {
+        execSync('brew install ffmpeg', { stdio: 'inherit' });
+      } else {
+        execSync('apt-get install -y ffmpeg || sudo apt-get install -y ffmpeg', { stdio: 'inherit' });
+      }
+      // Re-check
+      execSync('ffmpeg -version', { stdio: 'pipe' });
+      ffmpegAvailable = true;
+      console.log('✅ ffmpeg installed successfully');
+    } catch (e) {
+      console.log('❌ ffmpeg installation failed:', e.message);
+      console.log('   Manual install: https://ffmpeg.org/download.html');
+    }
+  }
+}
+
+// Check on startup
+checkFFmpeg();
 
 // === Config (all pre-filled) ===
 const config = {
@@ -59,6 +96,71 @@ const tg = new TelegramClient(session, config.apiId, config.apiHash, {
   connectionRetries: 5,
 });
 
+// === Check MP4 file structure — is moov at beginning or end? ===
+function checkFileStructure(buffer) {
+  try {
+    // Parse atoms from the beginning (first 64KB should have ftyp + maybe moov)
+    let offset = 0;
+    let moovAtStart = false;
+    let mdatFound = false;
+
+    while (offset < buffer.length - 8 && offset < 65536) {
+      const size = buffer.readUInt32BE(offset);
+      const type = buffer.toString('ascii', offset + 4, offset + 8);
+
+      if (type === 'moov') {
+        moovAtStart = true;
+        break;
+      }
+      if (type === 'mdat') {
+        mdatFound = true;
+        break;
+      }
+      if (size === 0 || size < 8) break;
+      offset += size;
+    }
+
+    // If mdat found before moov, moov is at the end (needs processing)
+    // If moov found before mdat, fast-start already OK
+    return {
+      fastStart: moovAtStart,
+      needsProcessing: mdatFound && !moovAtStart,
+    };
+  } catch {
+    // Not an MP4 or can't parse — assume needs processing
+    return { fastStart: false, needsProcessing: true, error: 'Cannot parse file structure' };
+  }
+}
+
+// === Process video with ffmpeg — move moov to beginning ===
+function processVideoFastStart(inputPath, outputPath) {
+  return new Promise((resolve, reject) => {
+    const cmd = `ffmpeg -i "${inputPath}" -c copy -movflags faststart "${outputPath}"`;
+    const child = exec(cmd, (error, stdout, stderr) => {
+      if (error) {
+        reject(new Error(`ffmpeg failed: ${error.message}`));
+      } else {
+        resolve({ stdout, stderr });
+      }
+    });
+
+    // Stream progress to callback
+    child.stdout?.on('data', (data) => {
+      const text = data.toString();
+      const match = text.match(/time=(\d+):(\d+):(\d+\.\d+)/);
+      if (match) {
+        const progress = child.stderr?.toString().match(/time=(\d+):(\d+):(\d+\.\d+)/);
+        if (progress) {
+          const [h, m, s] = progress.slice(1).map(Number);
+          const totalSec = h * 3600 + m * 60 + s;
+          // This is rough — ffmpeg doesn't give percentage easily with -c copy
+          child.emit('progress', totalSec);
+        }
+      }
+    });
+  });
+}
+
 // === Express ===
 const app = express();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2000 * 1024 * 1024 } });
@@ -68,7 +170,12 @@ app.use(express.json());
 
 // Health
 app.get('/api/health', (req, res) => {
-  res.json({ ok: true, data: { status: 'up' } });
+  res.json({ ok: true, data: { status: 'up', ffmpeg: ffmpegAvailable } });
+});
+
+// FFmpeg status
+app.get('/api/ffmpeg-status', (req, res) => {
+  res.json({ ok: true, data: { available: ffmpegAvailable } });
 });
 
 // Videos list
@@ -104,6 +211,37 @@ app.post('/api/upload', upload.fields([
 
     thumbPath = path.join(os.tmpdir(), `thumb-${Date.now()}.jpg`);
     fs.writeFileSync(thumbPath, thumbFile.buffer);
+
+    // ---- Check file structure — is moov at beginning or end? ----
+    // Read first 64KB of file to check atom order
+    const fileBuffer = fs.readFileSync(videoPath);
+    const headBuffer = fileBuffer.subarray(0, Math.min(65536, fileBuffer.length));
+    const fileStructure = checkFileStructure(headBuffer);
+
+    let processedVideoPath = videoPath;
+
+    // ---- If moov is at end, process with ffmpeg to move it to beginning ----
+    if (fileStructure.needsProcessing && ffmpegAvailable) {
+      try {
+        const processedPath = path.join(os.tmpdir(), `video-processed-${Date.now()}.mp4`);
+        await processVideoFastStart(videoPath, processedPath);
+
+        // Replace with processed file
+        if (fs.existsSync(processedPath)) {
+          fs.unlinkSync(videoPath); // delete original
+          processedVideoPath = processedPath;
+          videoPath = processedPath;
+          console.log('✅ Fast-start processing complete');
+        }
+      } catch (e) {
+        console.log('⚠️ Fast-start processing failed:', e.message);
+        console.log('   Uploading original file (moov at end)');
+      }
+    } else if (fileStructure.needsProcessing && !ffmpegAvailable) {
+      console.log('⚠️ ffmpeg not available — skipping fast-start processing');
+    } else if (fileStructure.fastStart) {
+      console.log('✅ Fast-start already OK — no processing needed');
+    }
 
     // Connect client if needed
     if (!tg.isConnected || !tg.isConnected()) {

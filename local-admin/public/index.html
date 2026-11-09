@@ -192,6 +192,7 @@
 <body>
   <div class="container">
     <h1>🎬 Intimora Local Admin</h1>
+    <div id="ffmpegStatus" class="status" style="display:none;"></div>
     <div id="status" class="status status-info" style="display:none;"></div>
 
     <!-- Upload -->
@@ -215,7 +216,7 @@
 
       <div class="progress-container" id="progressContainer">
         <div class="progress-header">
-          <span class="progress-label">Upload Progress</span>
+          <span class="progress-label" id="progressStep">Upload Progress</span>
           <span class="progress-percent" id="progressPercent">0%</span>
         </div>
         <div class="progress-bar-bg">
@@ -294,6 +295,22 @@ async function loadVideos() {
   }
 }
 
+async function checkFFmpeg() {
+  try {
+    const res = await fetch('/api/ffmpeg-status');
+    const data = await res.json();
+    const el = document.getElementById('ffmpegStatus');
+    if (data.data.available) {
+      el.textContent = '✅ FFmpeg ready — videos will be optimized for fast streaming';
+      el.className = 'status status-success';
+    } else {
+      el.textContent = '⚠️ FFmpeg not found — some videos may buffer on playback';
+      el.className = 'status status-error';
+    }
+    el.style.display = 'block';
+  } catch {}
+}
+
 async function uploadVideo() {
   const title = document.getElementById('title').value;
   const description = document.getElementById('description').value;
@@ -306,10 +323,11 @@ async function uploadVideo() {
   if (!videoFile) { showStatus('Select video file', 'error'); return; }
   if (!thumbFile) { showStatus('Thumbnail is compulsory', 'error'); return; }
 
-  showStatus('Uploading...', 'loading');
+  showStatus('Checking & processing...', 'loading');
   document.getElementById('progressContainer').style.display = 'block';
   document.getElementById('progressBar').style.width = '5%';
   document.getElementById('progressPercent').textContent = '5%';
+  document.getElementById('progressStep').textContent = 'Checking file...';
 
   const formData = new FormData();
   formData.append('title', title);
@@ -328,6 +346,7 @@ async function uploadVideo() {
       const percent = Math.round((e.loaded / e.total) * 100);
       document.getElementById('progressBar').style.width = percent + '%';
       document.getElementById('progressPercent').textContent = percent + '%';
+      document.getElementById('progressStep').textContent = 'Uploading to Telegram...';
       const elapsed = (Date.now() - startTime) / 1000;
       const speed = elapsed > 0 ? e.loaded / elapsed : 0;
       const speedStr = speed > 1024 * 1024 ? (speed / 1024 / 1024).toFixed(2) + ' MB/s' : (speed / 1024).toFixed(2) + ' KB/s';
@@ -358,6 +377,7 @@ async function uploadVideo() {
           document.getElementById('progressContainer').style.display = 'none';
           document.getElementById('progressBar').style.width = '0%';
           document.getElementById('progressPercent').textContent = '0%';
+          document.getElementById('progressStep').textContent = 'Upload Progress';
           document.getElementById('statSize').textContent = '0 B';
           document.getElementById('statSpeed').textContent = '—';
           document.getElementById('statEta').textContent = '—';
@@ -403,6 +423,7 @@ function exportMetadata() {
 }
 
 loadVideos();
+checkFFmpeg();
 </script>
 </body>
 </html>
