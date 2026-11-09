@@ -185,6 +185,7 @@
     }
     .badge-exclusive { background: #4a148c; color: #ce93d8; }
     .badge-public { background: #1b5e20; color: #a5d6a7; }
+    .badge-fs { background: #1565c0; color: #90caf9; }
     .divider { height: 1px; background: #333; margin: 20px 0; }
     .empty { text-align: center; color: #666; padding: 30px; }
   </style>
@@ -288,13 +289,15 @@ async function loadVideos() {
       const duration = v.duration ? v.duration + 's' : '0s';
       const date = v.createdAt && v.createdAt > 0 ? new Date(v.createdAt * 1000).toLocaleDateString() : 'Unknown';
       const badge = v.exclusive ? '<span class="badge badge-exclusive">🔒 Exclusive</span>' : '<span class="badge badge-public">Public</span>';
+      const fastStartBadge = v.is_fast_start ? ' <span class="badge badge-fs">⚡ Fast-start</span>' : '';
+      const reprocessBtn = v.is_fast_start ? '' : `<button class="btn-secondary btn-sm" onclick="reprocessVideo('${v.id}')">🔄 Re-process</button>`;
       return `
       <div class="video-item">
         <div class="video-item-info">
-          <div class="video-item-title">${title} ${badge}</div>
+          <div class="video-item-title">${title} ${badge}${fastStartBadge}</div>
           <div class="video-item-meta">${size} · ${duration} · ${date}</div>
         </div>
-        <button class="btn-secondary btn-sm" onclick="reprocessVideo('${v.id}')">🔄 Re-process</button>
+        ${reprocessBtn}
         <button class="btn-danger btn-sm" onclick="deleteVideo('${v.id}')">Delete</button>
       </div>`;
     }).join('');

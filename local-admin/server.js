@@ -211,9 +211,17 @@ function processVideoFastStart(inputPath, outputPath) {
 async function downloadVideoFromTelegram(videoMeta) {
   if (!tg.isConnected || !tg.isConnected()) await tg.connect();
   const inputVideo = await tg.getInputEntity(config.videoChannel);
-  const messages = await tg.getMessages(config.videoChannel, { ids: [videoMeta.video.tg_msg_id] });
-  if (!messages || messages.length === 0) throw new Error('Message not found in Telegram');
-  const msg = messages[0];
+  // Use GetHistory with maxId to fetch a specific message (avoids channels.GetMessages unsupported error)
+  const result = await tg.invoke(new Api.messages.GetHistory({
+    peer: inputVideo,
+    limit: 1,
+    maxId: BigInt(videoMeta.video.tg_msg_id),
+    minId: 0,
+    addOffset: 0,
+  }));
+  if (!result.messages || result.messages.length === 0) throw new Error('Message not found in Telegram');
+  const msg = result.messages[0];
+  if (msg.id !== Number(videoMeta.video.tg_msg_id)) throw new Error(`Message ID mismatch: expected ${videoMeta.video.tg_msg_id}, got ${msg.id}`);
   const tempPath = path.join(os.tmpdir(), `download-${Date.now()}.mp4`);
   await tg.downloadMedia(msg, { outputFile: tempPath });
   return tempPath;
@@ -280,6 +288,7 @@ async function syncVideosFromTelegram() {
             thumb_size: 0,
             thumb_msg_id: null,
           },
+          is_fast_start: true,
           createdAt: msg.date ? (typeof msg.date === 'number' ? msg.date > 1e12 ? Math.floor(msg.date / 1000) : msg.date : msg.date.getTime ? Math.floor(msg.date.getTime() / 1000) : Math.floor(Date.now() / 1000)) : Math.floor(Date.now() / 1000),
         });
         totalVideos++;
