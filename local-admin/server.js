@@ -5,6 +5,7 @@
 const express = require('express');
 const { TelegramClient } = require('teleproto');
 const { StringSession } = require('teleproto/sessions');
+const { Api } = require('teleproto');
 const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
@@ -220,47 +221,75 @@ async function downloadVideoFromTelegram(videoMeta) {
 
 // === Sync videos from Telegram video channel ===
 async function syncVideosFromTelegram() {
-  if (!tg.isConnected || !tg.isConnected()) await tg.connect();
+  if (!await tg.isConnected()) await tg.connect();
 
   const tgVideos = [];
   console.log('Syncing videos from Telegram...');
 
-  for await (const msg of tg.iterMessages(config.videoChannel, { limit: 5000 })) {
-    if (msg.document && msg.document.mimeType && msg.document.mimeType.startsWith('video/')) {
-      const refToBase64 = (ref) => ref ? ref.toString('base64') : '';
-      tgVideos.push({
-        id: `tg-${msg.id}`,
-        title: msg.caption || msg.document.fileName || 'Untitled',
-        description: '',
-        exclusive: false,
-        duration: 0,
-        views: 0,
-        likes: 0,
-        shares: 0,
-        likedBy: [],
-        video: {
-          tg_doc_id: String(msg.document.id),
-          tg_access_hash: String(msg.document.accessHash),
-          tg_file_ref: refToBase64(msg.document.fileReference),
-          tg_size: msg.document.size,
-          tg_mime: msg.document.mimeType,
-          tg_channel: config.videoChannel,
-          tg_msg_id: msg.id,
-          tg_filename: msg.document.fileName || 'video.mp4',
-        },
-        thumbnail: {
-          thumb_doc_id: '',
-          thumb_access_hash: '',
-          thumb_file_ref: '',
-          thumb_size: 0,
-          thumb_msg_id: null,
-        },
-        createdAt: msg.date ? Math.floor(msg.date.getTime() / 1000) : Math.floor(Date.now() / 1000),
-      });
+  const inputChannel = await tg.getInputEntity(config.videoChannel);
+  let offsetId = null;
+  let totalFetched = 0;
+  let totalVideos = 0;
+
+  // Paginate through all messages using messages.GetHistory
+  for (let page = 0; page < 50; page++) { // max 50 pages × 200 = 10,000 messages
+    const result = await tg.invoke(new Api.messages.GetHistory({
+      peer: inputChannel,
+      limit: 200,
+      offsetId: offsetId ? BigInt(offsetId) : undefined,
+      maxId: undefined,
+      minId: 0,
+      addOffset: 0,
+    }));
+
+    if (!result.messages || result.messages.length === 0) break;
+
+    for (const msg of result.messages) {
+      totalFetched++;
+      if (msg.document && msg.document.mimeType && msg.document.mimeType.startsWith('video/')) {
+        const refToBase64 = (ref) => ref ? ref.toString('base64') : '';
+        tgVideos.push({
+          id: `tg-${msg.id}`,
+          title: msg.caption || msg.document.fileName || 'Untitled',
+          description: '',
+          exclusive: false,
+          duration: 0,
+          views: 0,
+          likes: 0,
+          shares: 0,
+          likedBy: [],
+          video: {
+            tg_doc_id: String(msg.document.id),
+            tg_access_hash: String(msg.document.accessHash),
+            tg_file_ref: refToBase64(msg.document.fileReference),
+            tg_size: msg.document.size,
+            tg_mime: msg.document.mimeType,
+            tg_channel: config.videoChannel,
+            tg_msg_id: msg.id,
+            tg_filename: msg.document.fileName || 'video.mp4',
+          },
+          thumbnail: {
+            thumb_doc_id: '',
+            thumb_access_hash: '',
+            thumb_file_ref: '',
+            thumb_size: 0,
+            thumb_msg_id: null,
+          },
+          createdAt: msg.date ? Math.floor(msg.date.getTime() / 1000) : Math.floor(Date.now() / 1000),
+        });
+        totalVideos++;
+      }
     }
+
+    // Update offsetId for next page (oldest message ID)
+    const oldestMsg = result.messages[0];
+    if (!oldestMsg) break;
+    offsetId = oldestMsg.id;
+
+    if (result.messages.length < 200) break; // no more messages
   }
 
-  console.log(`Found ${tgVideos.length} videos in Telegram`);
+  console.log(`Fetched ${totalFetched} messages, found ${totalVideos} videos`);
 
   // Merge with local metadata — match by tg_msg_id
   const localMsgIds = new Set(localMetadata.map(v => v.video?.tg_msg_id));
