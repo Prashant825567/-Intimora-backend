@@ -1,95 +1,68 @@
-# Firebase Setup Guide
+# Firebase Setup Guide — No Service Account Key Needed
 
-## Step 1: Get Service Account Key
+## Approach: Firebase Auth REST API
+- Sirf **API Key** needed — private key nahi
+- `identitytoolkit.googleapis.com` se token verify hota hai
+- Organization policy me service account key ban rahi hai toh koi problem nahi
+
+---
+
+## Step 1: Get Firebase API Key
 
 1. Go to [Firebase Console](https://console.firebase.google.com/)
 2. Select project **intimora-app**
-3. Click **Project Settings** (gear icon)
-4. Click **Service Accounts** tab
-5. Click **Generate new private key**
-6. A JSON file downloads — **don't share this file publicly**
+3. Click **Project Settings** (gear icon ⚙️)
+4. Click **General** tab
+5. **Your apps** section me web app ke liye:
+   - `API key` dikhega — yehi hai `FIREBASE_API_KEY`
 
-## Step 2: Copy Keys from JSON
+---
 
-From the downloaded JSON file, copy these values:
-
-```json
-{
-  "type": "service_account",
-  "project_id": "intimora-app",
-  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBg...\n-----END PRIVATE KEY-----\n",
-  "client_email": "firebase-adminsdk@intimora-app.iam.gserviceaccount.com",
-  ...
-}
-```
-
-## Step 3: Update Backend `.env`
-
-Replace the placeholders in `.env`:
+## Step 2: Update Backend `.env`
 
 ```
-# Firebase Admin SDK
-FIREBASE_PROJECT_ID=intimora-app
-FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBg...\n-----END PRIVATE KEY-----\n"
-FIREBASE_CLIENT_EMAIL=firebase-adminsdk@intimora-app.iam.gserviceaccount.com
+# Firebase (backend — token verification via REST API)
+FIREBASE_API_KEY=AIzaSyD91f9kLylYXZnZjPSZOfjk1HFJ0Y-v7Yo
 ```
 
-**Important:** The private key must be in escaped format with `\n` for newlines.
+**Yehi hai — koi private key, client email nahi chahiye!**
 
-## Step 4: Update Vercel Environment Variables
+---
 
+## Step 3: Update Vercel/Render Environment Variables
+
+### Vercel:
 Go to Vercel → Project Settings → Environment Variables → Add:
 
 | Variable | Value |
 |----------|-------|
-| `FIREBASE_PROJECT_ID` | `intimora-app` |
-| `FIREBASE_PRIVATE_KEY` | `-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n` |
-| `FIREBASE_CLIENT_EMAIL` | `firebase-adminsdk@intimora-app.iam.gserviceaccount.com` |
+| `FIREBASE_API_KEY` | `AIzaSyD91f9kLylYXZnZjPSZOfjk1HFJ0Y-v7Yo` |
 
-## Step 5: Install firebase-admin on Backend
+### Render:
+Same — Environment Variables me add karo.
 
-```bash
-npm install firebase-admin
-```
+---
 
-## Step 6: Frontend Setup
+## Step 4: Install Dependencies
 
-1. Copy `firebase-auth.js` to your frontend project
-2. Import where needed:
+**Koi extra install nahi karna!** Firebase Admin SDK nahi chahiye.
+
+Backend sirf `fetch` use karega — Node 20+ me built-in hai.
+
+---
+
+## Step 5: Frontend Setup
+
+1. `firebase-auth.js` copy karo frontend project me
+2. Import karo:
 
 ```javascript
-import { signInWithGoogle, signOutUser, completeProfile, toggleLike, toggleSave } from './firebase-auth';
-
-// Sign in button
-async function handleSignIn() {
-  const result = await signInWithGoogle();
-  if (result.data.exists) {
-    // Existing user — go to site
-    navigate('/');
-  } else {
-    // New user — go to profile
-    navigate('/profile');
-  }
-}
-
-// Profile page
-async function handleProfile(name, username, referralCode) {
-  const result = await completeProfile({ name, username, referralCode });
-  if (result.ok) navigate('/');
-}
-
-// Like button
-async function handleLike(videoId) {
-  await toggleLike(videoId);
-}
-
-// Save button
-async function handleSave(videoId) {
-  await toggleSave(videoId);
-}
+import { signInWithGoogle, completeProfile, toggleLike, toggleSave, getReferralTree } from './firebase-auth';
 ```
 
-## Step 7: Frontend Pages Needed
+---
+
+## Step 6: Frontend Pages
 
 ### Login Page:
 ```jsx
@@ -153,38 +126,62 @@ function Dashboard() {
 }
 ```
 
-## Step 8: Update Backend Deployment
+---
 
-### Vercel:
-- Add `firebase-admin` to `package.json` dependencies ✅ (done)
-- Add env vars (Step 4)
+## Step 7: Test Flow
 
-### Render:
-- Add env vars in Render dashboard
-- `npm install firebase-admin`
+1. **Sign in with Google** → new email → profile page
+2. **Enter name + username** → referral code (optional) → complete
+3. **Sign out** → sign in again → goes directly to site
+4. **Like/save** videos → works
+5. **Dashboard** → referral tree shows
 
-## Step 9: Test
+---
 
-1. Sign in with Google → new email → profile page
-2. Enter name + username → referral code (optional) → complete
-3. Sign out → sign in again → goes directly to site
-4. Like/save videos → works
-5. Dashboard → referral tree shows
+## How Token Verification Works
+
+### Frontend:
+```javascript
+// Firebase Auth (client-side)
+const result = await signInWithPopup(auth, new GoogleAuthProvider());
+const token = await result.user.getIdToken();
+// Token sent to backend
+```
+
+### Backend:
+```javascript
+// REST API call — no private key needed
+POST https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=API_KEY
+{
+  "idToken": "token_from_frontend",
+  "maxResults": 1
+}
+
+// Response:
+{
+  "users": [{
+    "localId": "firebase-uid",
+    "email": "user@gmail.com"
+  }]
+}
+```
+
+---
 
 ## Troubleshooting
 
-### "Firebase Admin not initialized" in backend logs
-- `FIREBASE_PRIVATE_KEY` not set correctly
-- Check `.env` file has the full key with `\n` escapes
-
 ### "Invalid token" on API calls
 - Token expired — get new token with `getIdToken()`
-- Make sure frontend sends `Authorization: Bearer <token>` header
+- Frontend `Authorization: Bearer <token>` header send karo
 
 ### "Username already exists"
-- Try a different username
-- Usernames are unique across all users
+- Try different username
+- Usernames unique hain sabhi users ke liye
 
 ### "Invalid referral code"
-- Make sure the code starts with `REF-`
-- Only existing users' codes work
+- Code `REF-` prefix hona chahiye
+- Sirf existing users ke codes work karte hain
+
+### "FIREBASE_API_KEY not set"
+- `.env` me `FIREBASE_API_KEY` add karo
+- Vercel env vars me bhi add karo

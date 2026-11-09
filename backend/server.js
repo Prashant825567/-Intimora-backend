@@ -9,16 +9,23 @@ const store = require("./store");
 const tg = require("./telegram");
 const users = require("./users");
 
-// ---- Firebase Admin SDK (token verification) ----
-let admin = null;
-try {
-  admin = require("firebase-admin");
-  admin.initializeApp({
-    credential: admin.credential.applicationDefault(),
-    projectId: process.env.FIREBASE_PROJECT_ID,
-  });
-} catch (e) {
-  console.warn("Firebase Admin not initialized:", e.message);
+// ---- Firebase Auth — token verification via REST API (no service account key needed) ----
+const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY;
+
+async function verifyFirebaseToken(token) {
+  if (!FIREBASE_API_KEY) throw new Error("FIREBASE_API_KEY not set");
+  const res = await fetch(
+    `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${FIREBASE_API_KEY}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ idToken: token, maxResults: 1 }),
+    }
+  );
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message);
+  if (!data.users || data.users.length === 0) throw new Error("Invalid token");
+  return data.users[0];
 }
 
 // ---- Auth middleware — verify Firebase ID token ----
@@ -28,11 +35,10 @@ async function auth(req, res, next) {
     return res.status(401).json({ ok: false, error: "No auth token" });
   }
   const token = header.split(" ")[1];
-  if (!admin) return res.status(500).json({ ok: false, error: "Firebase not configured" });
   try {
-    const decoded = await admin.auth().verifyIdToken(token);
-    req.userId = decoded.uid;
-    req.userEmail = decoded.email;
+    const decoded = await verifyFirebaseToken(token);
+    req.userId = decoded.localId;
+    req.userEmail = decoded.email || "";
     next();
   } catch (e) {
     return res.status(401).json({ ok: false, error: "Invalid token" });
