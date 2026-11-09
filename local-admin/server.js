@@ -280,7 +280,7 @@ async function syncVideosFromTelegram() {
             thumb_size: 0,
             thumb_msg_id: null,
           },
-          createdAt: msg.date ? Math.floor(msg.date.getTime() / 1000) : Math.floor(Date.now() / 1000),
+          createdAt: msg.date ? (typeof msg.date === 'number' ? msg.date > 1e12 ? Math.floor(msg.date / 1000) : msg.date : msg.date.getTime ? Math.floor(msg.date.getTime() / 1000) : Math.floor(Date.now() / 1000)) : Math.floor(Date.now() / 1000),
         });
         totalVideos++;
       }
