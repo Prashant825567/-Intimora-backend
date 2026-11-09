@@ -333,6 +333,65 @@ async function* streamRange(video, start, end) {
   }
 }
 
+// ---- Fast-start: find moov atom by reading the end of the file ----
+// Returns { offset, size, data } if moov is at the end, null if moov is at the beginning (or not found)
+async function findMoovAtom(video) {
+  const client = await getClient();
+  const fileSize = video.tg_size;
+
+  // Read last 4 parts (2MB), aligned to 512KB
+  const numParts = 4;
+  const alignedStart = Math.floor(Math.max(0, fileSize - numParts * PART) / PART) * PART;
+
+  // Fetch parts in parallel
+  const promises = [];
+  for (let offset = alignedStart; offset < fileSize; offset += PART) {
+    const limit = Math.min(PART, fileSize - offset);
+    promises.push(getFileChunk(client, video, offset, limit));
+  }
+  const parts = await Promise.all(promises);
+  const combined = Buffer.concat(parts);
+
+  // Parse atoms from the combined buffer
+  let offset = 0;
+  while (offset < combined.length - 8) {
+    try {
+      const size = combined.readUInt32BE(offset);
+      const type = combined.toString("ascii", offset + 4, offset + 8);
+
+      if (type === "moov") {
+        return {
+          offset: alignedStart + offset,
+          size: size,
+          data: combined.subarray(offset, offset + size),
+        };
+      }
+
+      if (size === 0 || size < 8) break;
+      offset += size;
+    } catch {
+      break;
+    }
+  }
+
+  return null; // moov not at end — probably at beginning (fast-start already OK)
+}
+
+// ---- Read a specific byte range from the file ----
+async function readFileRange(video, start, end) {
+  const client = await getClient();
+  const alignedStart = Math.floor(start / PART) * PART;
+  const limit = Math.min(PART, end - alignedStart + 1);
+  const bytes = await getFileChunk(client, video, alignedStart, limit);
+  let headDiscard = start - alignedStart;
+  let result = bytes.subarray(headDiscard);
+  const neededEnd = end - alignedStart;
+  if (neededEnd < result.length) {
+    result = result.subarray(0, neededEnd + 1);
+  }
+  return result;
+}
+
 // thumbnail (separate photo) — fetch whole small image using downloadMedia (no file ref needed)
 async function fetchThumbnail(video) {
   if (!video.thumb_msg_id) {
@@ -568,6 +627,8 @@ module.exports = {
   uploadVideo,
   uploadThumbnail,
   streamRange,
+  findMoovAtom,
+  readFileRange,
   fetchThumbnail,
   buildMetadata,
   sendMetadata,

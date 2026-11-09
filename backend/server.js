@@ -215,6 +215,37 @@ app.get("/api/videos/:id/stream", async (req, res) => {
     }
     if (start >= fileSize) return fail(res, "Range not satisfiable", 416);
 
+    // ---- Fast-start optimization ----
+    // If browser requests from offset 0 and moov is at the END of the file,
+    // send ftyp + moov first so browser can start playing immediately.
+    // If moov is already at the beginning, findMoovAtom returns null → normal streaming.
+    if (start === 0) {
+      try {
+        const moov = await tg.findMoovAtom(streamFormat);
+        if (moov) {
+          // moov is at the end — send ftyp + moov as 200 response
+          const ftypData = await tg.readFileRange(streamFormat, 0, 31);
+          const totalBytes = ftypData.length + moov.data.length;
+
+          res.status(200);
+          res.set({
+            "Content-Type": "video/mp4",
+            "Accept-Ranges": "bytes",
+            "Content-Length": totalBytes,
+            "Cache-Control": "public, max-age=3600",
+            "Vary": "Origin, Range",
+            "Cross-Origin-Resource-Policy": "cross-origin",
+          });
+
+          res.write(ftypData);
+          res.write(moov.data);
+          return res.end();
+        }
+      } catch (e) {
+        console.log("[fast-start] moov search failed:", e.message);
+      }
+    }
+
     res.status(status);
     res.set({
       "Content-Type": streamFormat.tg_mime || "video/mp4",
