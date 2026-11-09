@@ -248,6 +248,7 @@
       <div class="card-title">📋 Uploaded Videos</div>
       <div class="btn-group" style="margin-bottom:16px;">
         <button class="btn-secondary btn-sm" onclick="loadVideos()">Refresh</button>
+        <button class="btn-secondary btn-sm" onclick="syncVideos()">📡 Sync from Telegram</button>
         <button class="btn-secondary btn-sm" onclick="exportMetadata()">Export JSON</button>
       </div>
       <div class="video-list" id="videoList"></div>
@@ -400,6 +401,22 @@ async function uploadVideo() {
   };
 
   xhr.send(formData);
+}
+
+async function syncVideos() {
+  showStatus('Syncing videos from Telegram...', 'loading');
+  try {
+    const res = await fetch('/api/sync-videos', { method: 'POST' });
+    const data = await res.json();
+    if (data.ok) {
+      showStatus(`Sync complete! ${data.data.added} new videos added. ${data.data.total} total.`, 'success');
+      loadVideos();
+    } else {
+      showStatus('Error: ' + data.error, 'error');
+    }
+  } catch (e) {
+    showStatus('Error: ' + e.message, 'error');
+  }
 }
 
 async function reprocessVideo(id) {

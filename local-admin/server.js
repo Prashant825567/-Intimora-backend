@@ -218,6 +218,64 @@ async function downloadVideoFromTelegram(videoMeta) {
   return tempPath;
 }
 
+// === Sync videos from Telegram video channel ===
+async function syncVideosFromTelegram() {
+  if (!tg.isConnected || !tg.isConnected()) await tg.connect();
+
+  const tgVideos = [];
+  console.log('Syncing videos from Telegram...');
+
+  for await (const msg of tg.iterMessages(config.videoChannel, { limit: 5000 })) {
+    if (msg.document && msg.document.mimeType && msg.document.mimeType.startsWith('video/')) {
+      const refToBase64 = (ref) => ref ? ref.toString('base64') : '';
+      tgVideos.push({
+        id: `tg-${msg.id}`,
+        title: msg.caption || msg.document.fileName || 'Untitled',
+        description: '',
+        exclusive: false,
+        duration: 0,
+        views: 0,
+        likes: 0,
+        shares: 0,
+        likedBy: [],
+        video: {
+          tg_doc_id: String(msg.document.id),
+          tg_access_hash: String(msg.document.accessHash),
+          tg_file_ref: refToBase64(msg.document.fileReference),
+          tg_size: msg.document.size,
+          tg_mime: msg.document.mimeType,
+          tg_channel: config.videoChannel,
+          tg_msg_id: msg.id,
+          tg_filename: msg.document.fileName || 'video.mp4',
+        },
+        thumbnail: {
+          thumb_doc_id: '',
+          thumb_access_hash: '',
+          thumb_file_ref: '',
+          thumb_size: 0,
+          thumb_msg_id: null,
+        },
+        createdAt: msg.date ? Math.floor(msg.date.getTime() / 1000) : Math.floor(Date.now() / 1000),
+      });
+    }
+  }
+
+  console.log(`Found ${tgVideos.length} videos in Telegram`);
+
+  // Merge with local metadata — match by tg_msg_id
+  const localMsgIds = new Set(localMetadata.map(v => v.video?.tg_msg_id));
+  const tgMsgIds = new Set(tgVideos.map(v => v.video.tg_msg_id));
+
+  // Add Telegram videos that are not in local metadata
+  const newVideos = tgVideos.filter(v => !localMsgIds.has(v.video.tg_msg_id));
+  console.log(`${newVideos.length} new videos to add`);
+
+  localMetadata = [...newVideos, ...localMetadata];
+  saveMetadata();
+
+  return { total: localMetadata.length, added: newVideos.length };
+}
+
 // === Reprocess video — download → ffmpeg → re-upload ===
 async function reprocessVideo(videoId) {
   const videoMeta = localMetadata.find(v => v.id === videoId);
@@ -487,6 +545,16 @@ app.post('/api/reprocess/:id', async (req, res) => {
   try {
     const result = await reprocessVideo(req.params.id);
     res.json(result);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// Sync videos from Telegram
+app.post('/api/sync-videos', async (req, res) => {
+  try {
+    const result = await syncVideosFromTelegram();
+    res.json({ ok: true, data: result });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
