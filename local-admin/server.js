@@ -221,18 +221,18 @@ async function downloadVideoFromTelegram(videoMeta) {
 
 // === Sync videos from Telegram video channel ===
 async function syncVideosFromTelegram() {
-  if (!await tg.isConnected()) await tg.connect();
+  console.log('Step 1: Getting input entity...');
+  const inputChannel = await tg.getInputEntity(config.videoChannel);
+  console.log('Step 2: Input entity resolved');
 
   const tgVideos = [];
-  console.log('Syncing videos from Telegram...');
-
-  const inputChannel = await tg.getInputEntity(config.videoChannel);
   let offsetId = null;
   let totalFetched = 0;
   let totalVideos = 0;
 
   // Paginate through all messages using messages.GetHistory
-  for (let page = 0; page < 50; page++) { // max 50 pages × 200 = 10,000 messages
+  for (let page = 0; page < 50; page++) {
+    console.log(`Page ${page + 1}: fetching messages...`);
     const result = await tg.invoke(new Api.messages.GetHistory({
       peer: inputChannel,
       limit: 200,
@@ -242,7 +242,12 @@ async function syncVideosFromTelegram() {
       addOffset: 0,
     }));
 
-    if (!result.messages || result.messages.length === 0) break;
+    if (!result.messages || result.messages.length === 0) {
+      console.log('No more messages');
+      break;
+    }
+
+    console.log(`Page ${page + 1}: got ${result.messages.length} messages`);
 
     for (const msg of result.messages) {
       totalFetched++;
@@ -281,12 +286,11 @@ async function syncVideosFromTelegram() {
       }
     }
 
-    // Update offsetId for next page (oldest message ID)
     const oldestMsg = result.messages[0];
     if (!oldestMsg) break;
     offsetId = oldestMsg.id;
 
-    if (result.messages.length < 200) break; // no more messages
+    if (result.messages.length < 200) break;
   }
 
   console.log(`Fetched ${totalFetched} messages, found ${totalVideos} videos`);
@@ -581,10 +585,19 @@ app.post('/api/reprocess/:id', async (req, res) => {
 
 // Sync videos from Telegram
 app.post('/api/sync-videos', async (req, res) => {
+  console.log('📡 Sync endpoint called');
   try {
+    console.log('Checking connection...');
+    if (!await tg.isConnected()) {
+      console.log('Connecting to Telegram...');
+      await tg.connect();
+    }
+    console.log('Connection OK, starting sync...');
     const result = await syncVideosFromTelegram();
+    console.log('Sync complete:', result);
     res.json({ ok: true, data: result });
   } catch (e) {
+    console.error('Sync error:', e.message, e.stack);
     res.status(500).json({ ok: false, error: e.message });
   }
 });
