@@ -37,10 +37,19 @@ function generateReferralCode() {
   return "REF-" + code;
 }
 
-// ---- Read all users from Telegram ----
+// ---- In-memory cache for users ----
+let usersCache = null;
+let usersCacheTime = 0;
+const CACHE_TTL = 60000; // 60 seconds
+
 async function readUsers() {
+  // Check cache first
+  if (usersCache && (Date.now() - usersCacheTime) < CACHE_TTL) {
+    return usersCache;
+  }
+
   const messages = await tg.readMessages(tg.channelUsers(), 5000);
-  return messages
+  usersCache = messages
     .map((m) => {
       try {
         const user = JSON.parse(m.text);
@@ -49,6 +58,13 @@ async function readUsers() {
       } catch { return null; }
     })
     .filter((u) => u && u.t === "user");
+  usersCacheTime = Date.now();
+  return usersCache;
+}
+
+function invalidateCache() {
+  usersCache = null;
+  usersCacheTime = 0;
 }
 
 // ---- Read all referrals from Telegram ----
@@ -115,6 +131,7 @@ async function createUser({ email, name, username, uid, avatar, referredBy }) {
     await tg.sendMessage(tg.channelReferrals(), JSON.stringify(ref));
   }
 
+  invalidateCache();
   return user;
 }
 
@@ -124,6 +141,7 @@ async function updateUser(uid, updates) {
   if (!user) return null;
   Object.assign(user, updates);
   await tg.editMessage(tg.channelUsers(), user._msgId, JSON.stringify(user));
+  invalidateCache();
   return user;
 }
 
@@ -140,6 +158,9 @@ async function toggleLike(uid, videoId) {
   }
   user.likedVideos = liked;
   await tg.editMessage(tg.channelUsers(), user._msgId, JSON.stringify(user));
+
+  // Update cache timestamp — user object is from cache, already modified
+  usersCacheTime = Date.now();
   return { liked: idx === -1, likedVideos: liked };
 }
 
@@ -156,6 +177,9 @@ async function toggleSave(uid, videoId) {
   }
   user.savedVideos = saved;
   await tg.editMessage(tg.channelUsers(), user._msgId, JSON.stringify(user));
+
+  // Update cache timestamp — user object is from cache, already modified
+  usersCacheTime = Date.now();
   return { saved: idx === -1, savedVideos: saved };
 }
 
