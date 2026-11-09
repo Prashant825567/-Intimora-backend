@@ -7,6 +7,37 @@ const serverless = require("serverless-http");
 
 const store = require("./store");
 const tg = require("./telegram");
+const users = require("./users");
+
+// ---- Firebase Admin SDK (token verification) ----
+let admin = null;
+try {
+  admin = require("firebase-admin");
+  admin.initializeApp({
+    credential: admin.credential.applicationDefault(),
+    projectId: process.env.FIREBASE_PROJECT_ID,
+  });
+} catch (e) {
+  console.warn("Firebase Admin not initialized:", e.message);
+}
+
+// ---- Auth middleware — verify Firebase ID token ----
+async function auth(req, res, next) {
+  const header = req.headers.authorization;
+  if (!header || !header.startsWith("Bearer ")) {
+    return res.status(401).json({ ok: false, error: "No auth token" });
+  }
+  const token = header.split(" ")[1];
+  if (!admin) return res.status(500).json({ ok: false, error: "Firebase not configured" });
+  try {
+    const decoded = await admin.auth().verifyIdToken(token);
+    req.userId = decoded.uid;
+    req.userEmail = decoded.email;
+    next();
+  } catch (e) {
+    return res.status(401).json({ ok: false, error: "Invalid token" });
+  }
+}
 
 const app = express();
 app.use(express.json({ limit: "10mb" }));
@@ -189,22 +220,126 @@ app.get("/api/videos/:id/stream", async (req, res) => {
   }
 });
 
-// Like / unlike (toggle) — edits Telegram metadata message directly
-app.post("/api/videos/:id/like", async (req, res) => {
-  try {
-    const userId = (req.body.userId || "anon").slice(0, 64);
-    const result = await store.toggleLike(req.params.id, userId);
-    if (!result) return fail(res, "Video not found", 404);
-    ok(res, result);
-  } catch (e) { fail(res, e.message, 500); }
-});
-
 // Record a share — edits Telegram metadata message directly
 app.post("/api/videos/:id/share", async (req, res) => {
   try {
     const v = await store.incrementShares(req.params.id);
     if (!v) return fail(res, "Video not found", 404);
     ok(res, { shares: v.shares });
+  } catch (e) { fail(res, e.message, 500); }
+});
+
+// ============================================================
+// USER SYSTEM — Firebase Auth + Telegram storage
+// ============================================================
+
+// Verify Firebase token — returns user if exists
+app.post("/api/auth/verify", auth, async (req, res) => {
+  try {
+    const user = await users.findByUid(req.userId);
+    if (!user) {
+      return ok(res, { exists: false, email: req.userEmail, uid: req.userId });
+    }
+    ok(res, { exists: true, user });
+  } catch (e) { fail(res, e.message, 500); }
+});
+
+// Complete profile — new user only
+app.post("/api/auth/profile", auth, async (req, res) => {
+  try {
+    const { name, username, referralCode, avatar } = req.body;
+    if (!name || !username) return fail(res, "Name and username required", 400);
+
+    // Check if user already exists
+    const existing = await users.findByUid(req.userId);
+    if (existing) return fail(res, "User already exists", 400);
+
+    // Check username availability
+    const usernameTaken = await users.findByUsername(username);
+    if (usernameTaken) return fail(res, "Username already exists", 400);
+
+    // Validate referral code if provided
+    let referredBy = "";
+    if (referralCode && referralCode.trim()) {
+      const referrer = await users.findByReferralCode(referralCode.trim());
+      if (!referrer) return fail(res, "Invalid referral code", 400);
+      referredBy = referrer.referralCode;
+    }
+
+    const user = await users.createUser({
+      email: req.userEmail,
+      name,
+      username,
+      uid: req.userId,
+      avatar: avatar || "",
+      referredBy,
+    });
+
+    ok(res, { user: { id: user.id, name: user.name, username: user.username, referralCode: user.referralCode } });
+  } catch (e) { fail(res, e.message, 500); }
+});
+
+// Get current user
+app.get("/api/auth/me", auth, async (req, res) => {
+  try {
+    const user = await users.findByUid(req.userId);
+    if (!user) return fail(res, "User not found", 404);
+    ok(res, { user });
+  } catch (e) { fail(res, e.message, 500); }
+});
+
+// Like / unlike video (authenticated)
+app.post("/api/videos/:id/like", auth, async (req, res) => {
+  try {
+    const result = await users.toggleLike(req.userId, req.params.id);
+    if (!result) return fail(res, "User not found", 404);
+    ok(res, result);
+  } catch (e) { fail(res, e.message, 500); }
+});
+
+// Save / unsave video (authenticated)
+app.post("/api/videos/:id/save", auth, async (req, res) => {
+  try {
+    const result = await users.toggleSave(req.userId, req.params.id);
+    if (!result) return fail(res, "User not found", 404);
+    ok(res, result);
+  } catch (e) { fail(res, e.message, 500); }
+});
+
+// Get user's liked videos
+app.get("/api/user/liked", auth, async (req, res) => {
+  try {
+    const likedIds = await users.getLikedVideos(req.userId);
+    if (!likedIds) return fail(res, "User not found", 404);
+    const videos = [];
+    for (const id of likedIds) {
+      const v = await store.getVideo(id);
+      if (v) videos.push(v);
+    }
+    ok(res, { videos });
+  } catch (e) { fail(res, e.message, 500); }
+});
+
+// Get user's saved videos
+app.get("/api/user/saved", auth, async (req, res) => {
+  try {
+    const savedIds = await users.getSavedVideos(req.userId);
+    if (!savedIds) return fail(res, "User not found", 404);
+    const videos = [];
+    for (const id of savedIds) {
+      const v = await store.getVideo(id);
+      if (v) videos.push(v);
+    }
+    ok(res, { videos });
+  } catch (e) { fail(res, e.message, 500); }
+});
+
+// Get referral tree
+app.get("/api/user/referrals", auth, async (req, res) => {
+  try {
+    const tree = await users.getReferralTree(req.userId);
+    if (!tree) return fail(res, "User not found", 404);
+    ok(res, { tree });
   } catch (e) { fail(res, e.message, 500); }
 });
 

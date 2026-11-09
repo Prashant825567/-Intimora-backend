@@ -30,6 +30,16 @@ function channelMeta() {
   if (!c) throw new Error("TELEGRAM_CHANNEL_META not set");
   return c;
 }
+function channelUsers() {
+  const c = process.env.TELEGRAM_CHANNEL_USERS;
+  if (!c) throw new Error("TELEGRAM_CHANNEL_USERS not set");
+  return c;
+}
+function channelReferrals() {
+  const c = process.env.TELEGRAM_CHANNEL_REFERRALS;
+  if (!c) throw new Error("TELEGRAM_CHANNEL_REFERRALS not set");
+  return c;
+}
 
 async function getClient() {
   if (_client && _client.isConnected && _client.isConnected()) return _client;
@@ -502,6 +512,29 @@ async function syncMetadataToTelegram(video) {
   await editMetadata(video.meta_msg_id, metadata);
 }
 
+// ---- Generic message functions (for any channel) ----
+async function sendMessage(channel, text) {
+  const client = await getClient();
+  const msg = await client.sendMessage(channel, { message: text });
+  return msg.id;
+}
+
+async function editMessage(channel, msgId, text) {
+  const client = await getClient();
+  await client.editMessage(channel, { message: msgId, text });
+}
+
+async function readMessages(channel, limit = 5000) {
+  const client = await getClient();
+  const result = [];
+  for await (const msg of client.iterMessages(channel, { limit })) {
+    if (msg.message) {
+      result.push({ id: msg.id, text: msg.message });
+    }
+  }
+  return result;
+}
+
 module.exports = {
   getClient,
   sendLoginCode,
@@ -517,6 +550,11 @@ module.exports = {
   findVideoById,
   updateVideoStats,
   deleteVideoMessages,
+  channelUsers,
+  channelReferrals,
+  sendMessage,
+  editMessage,
+  readMessages,
   getDirectUrl,
   syncMetadataToTelegram,
   refToBase64,
