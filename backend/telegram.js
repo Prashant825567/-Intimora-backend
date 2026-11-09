@@ -289,16 +289,18 @@ async function* streamRange(video, start, end) {
   );
   let headDiscard = start - alignedStart;
 
-  // Build part list — each part's limit is based on actual file size
+  // Build part list — ALWAYS request full PART (512KB) from Telegram.
+  // Telegram GetFile rejects limits < PART (e.g. limit=13). We trim to exact
+  // requested bytes after receiving the full part.
   const parts = [];
   for (let offset = alignedStart; offset <= alignedEnd; offset += PART) {
-    const limit = Math.min(PART, fileSize - offset);
-    parts.push({ offset, limit });
+    parts.push({ offset, limit: PART }); // always full part — no small limits
   }
 
   // Ordered queue: fetch in batches of 8, yield in order
   const POOL = 8;
   let results = [];
+  let bytesRemaining = end - start + 1; // total bytes we need to yield
 
   for (let i = 0; i < parts.length; i += POOL) {
     const batch = parts.slice(i, i + POOL);
@@ -308,9 +310,15 @@ async function* streamRange(video, start, end) {
     );
     results = results.concat(batchResults);
 
-    // Yield results in order
+    // Yield results in order — trim each part to not exceed bytesRemaining
     for (let j = 0; j < results.length; j++) {
       let bytes = results[j];
+
+      // Handle short responses — Telegram may return fewer bytes for last part
+      // If short response AND not the last part, log warning but continue
+      if (bytes.length < PART && bytes.length === 0) {
+        continue; // skip empty
+      }
 
       // Trim head from first part
       if (headDiscard > 0) {
@@ -319,16 +327,22 @@ async function* streamRange(video, start, end) {
         headDiscard -= skip;
       }
 
-      // Trim tail from last part — based on actual requested end
-      const partOffset = parts[j].offset;
-      const partDataStart = partOffset - alignedStart; // offset within aligned range
-      const requestedEndInPart = end - partOffset;      // how many bytes we need from this part
-      if (requestedEndInPart >= 0 && requestedEndInPart < bytes.length) {
-        bytes = bytes.subarray(0, requestedEndInPart + 1);
+      // Trim tail — only yield what we still need
+      // After head trim, bytes start at 'start' for first part, or at part.offset for others
+      // But we track via bytesRemaining — simpler and correct
+      if (bytes.length > bytesRemaining) {
+        bytes = bytes.subarray(0, bytesRemaining);
       }
 
-      if (bytes.length) yield bytes;
+      if (bytes.length > 0) {
+        bytesRemaining -= bytes.length;
+        yield bytes;
+      }
+
+      if (bytesRemaining <= 0) break;
     }
+
+    if (bytesRemaining <= 0) break;
     results = [];
   }
 }

@@ -213,7 +213,12 @@ app.get("/api/videos/:id/stream", async (req, res) => {
         status = 206;
       }
     }
-    if (start >= fileSize) return fail(res, "Range not satisfiable", 416);
+    if (start >= fileSize || start > end) {
+      return res.status(416).set({
+        "Content-Range": `bytes */${fileSize}`,
+        "Accept-Ranges": "bytes",
+      }).json({ ok: false, error: "Range not satisfiable" });
+    }
 
     // ---- Fast-start optimization ----
     // If browser requests from offset 0 and moov is at the END of the file,
