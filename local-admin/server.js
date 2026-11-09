@@ -13,35 +13,94 @@ const { execSync, exec } = require('child_process');
 
 // === FFmpeg Check & Auto-Install ===
 let ffmpegAvailable = false;
+let ffmpegPath = null;
 
 function checkFFmpeg() {
+  // Method 1: Check if ffmpeg is already in PATH
   try {
     execSync('ffmpeg -version', { stdio: 'pipe' });
     ffmpegAvailable = true;
-    console.log('✅ ffmpeg found');
-  } catch {
-    ffmpegAvailable = false;
-    console.log('⚠️ ffmpeg not found — attempting install...');
-    try {
-      // Try common install commands
-      const os = require('os');
-      const platform = os.platform();
-      if (platform === 'win32') {
-        execSync('winget install ffmpeg -y', { stdio: 'inherit' });
-      } else if (platform === 'darwin') {
-        execSync('brew install ffmpeg', { stdio: 'inherit' });
-      } else {
-        execSync('apt-get install -y ffmpeg || sudo apt-get install -y ffmpeg', { stdio: 'inherit' });
+    console.log('✅ ffmpeg found in PATH');
+    return;
+  } catch {}
+
+  // Method 2: Try ffmpeg-static npm package (pre-built binary, most reliable)
+  try {
+    const ffmpegStatic = require('ffmpeg-static');
+    if (ffmpegStatic) {
+      // Test the binary
+      try {
+        execSync(`"${ffmpegStatic}" -version`, { stdio: 'pipe' });
+        ffmpegAvailable = true;
+        ffmpegPath = ffmpegStatic;
+        console.log('✅ ffmpeg found via ffmpeg-static package');
+        return;
+      } catch (e) {
+        console.log('⚠️ ffmpeg-static binary exists but failed:', e.message);
       }
-      // Re-check
+    }
+  } catch (e) {
+    console.log('⚠️ ffmpeg-static not installed');
+  }
+
+  // Method 3: Try system package managers
+  const os = require('os');
+  const platform = os.platform();
+
+  try {
+    if (platform === 'win32') {
+      // Try winget, choco, scoop
+      const commands = [
+        'winget install ffmpeg -y',
+        'choco install ffmpeg -y',
+        'scoop install ffmpeg',
+      ];
+      for (const cmd of commands) {
+        try {
+          execSync(cmd, { stdio: 'pipe', timeout: 120000 });
+          // Re-check
+          execSync('ffmpeg -version', { stdio: 'pipe' });
+          ffmpegAvailable = true;
+          console.log(`✅ ffmpeg installed via ${cmd.split(' ')[0]}`);
+          return;
+        } catch {}
+      }
+    } else if (platform === 'darwin') {
+      execSync('brew install ffmpeg', { stdio: 'pipe', timeout: 120000 });
       execSync('ffmpeg -version', { stdio: 'pipe' });
       ffmpegAvailable = true;
-      console.log('✅ ffmpeg installed successfully');
-    } catch (e) {
-      console.log('❌ ffmpeg installation failed:', e.message);
-      console.log('   Manual install: https://ffmpeg.org/download.html');
+      console.log('✅ ffmpeg installed via brew');
+      return;
+    } else {
+      execSync('apt-get install -y ffmpeg || sudo apt-get install -y ffmpeg', { stdio: 'pipe', timeout: 120000 });
+      execSync('ffmpeg -version', { stdio: 'pipe' });
+      ffmpegAvailable = true;
+      console.log('✅ ffmpeg installed via apt-get');
+      return;
     }
+  } catch (e) {
+    console.log('❌ System package manager install failed:', e.message);
   }
+
+  // Method 4: Try installing ffmpeg-static via npm
+  try {
+    console.log('⚠️ Attempting npm install of ffmpeg-static...');
+    execSync('npm install ffmpeg-static', { cwd: __dirname, stdio: 'pipe', timeout: 120000 });
+    const ffmpegStatic = require('ffmpeg-static');
+    if (ffmpegStatic) {
+      execSync(`"${ffmpegStatic}" -version`, { stdio: 'pipe' });
+      ffmpegAvailable = true;
+      ffmpegPath = ffmpegStatic;
+      console.log('✅ ffmpeg installed via npm ffmpeg-static');
+      return;
+    }
+  } catch (e) {
+    console.log('❌ npm install failed:', e.message);
+  }
+
+  console.log('❌ All installation methods failed');
+  console.log('   Manual install: https://ffmpeg.org/download.html');
+  console.log('   Or run: npm install ffmpeg-static');
 }
 
 // Check on startup
@@ -135,27 +194,13 @@ function checkFileStructure(buffer) {
 // === Process video with ffmpeg — move moov to beginning ===
 function processVideoFastStart(inputPath, outputPath) {
   return new Promise((resolve, reject) => {
-    const cmd = `ffmpeg -i "${inputPath}" -c copy -movflags faststart "${outputPath}"`;
+    const ffmpegCmd = ffmpegPath || 'ffmpeg';
+    const cmd = `"${ffmpegCmd}" -i "${inputPath}" -c copy -movflags faststart "${outputPath}"`;
     const child = exec(cmd, (error, stdout, stderr) => {
       if (error) {
         reject(new Error(`ffmpeg failed: ${error.message}`));
       } else {
         resolve({ stdout, stderr });
-      }
-    });
-
-    // Stream progress to callback
-    child.stdout?.on('data', (data) => {
-      const text = data.toString();
-      const match = text.match(/time=(\d+):(\d+):(\d+\.\d+)/);
-      if (match) {
-        const progress = child.stderr?.toString().match(/time=(\d+):(\d+):(\d+\.\d+)/);
-        if (progress) {
-          const [h, m, s] = progress.slice(1).map(Number);
-          const totalSec = h * 3600 + m * 60 + s;
-          // This is rough — ffmpeg doesn't give percentage easily with -c copy
-          child.emit('progress', totalSec);
-        }
       }
     });
   });
