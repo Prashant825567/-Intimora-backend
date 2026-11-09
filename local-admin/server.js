@@ -588,7 +588,7 @@ app.post('/api/sync-videos', async (req, res) => {
   console.log('📡 Sync endpoint called');
   try {
     console.log('Checking connection...');
-    if (!await tg.isConnected()) {
+    if (!tg.isConnected || !tg.isConnected()) {
       console.log('Connecting to Telegram...');
       await tg.connect();
     }
