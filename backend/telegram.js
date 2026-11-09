@@ -614,13 +614,20 @@ async function syncMetadataToTelegram(video) {
 // ---- Generic message functions (for any channel) ----
 async function sendMessage(channel, text) {
   const client = await getClient();
-  const msg = await client.sendMessage(channel, { message: text });
+  const msg = await client.sendMessage(channel, {
+    message: text,
+    parseMode: false,
+  });
   return msg.id;
 }
 
 async function editMessage(channel, msgId, text) {
   const client = await getClient();
-  await client.editMessage(channel, { message: msgId, text });
+  await client.editMessage(channel, {
+    message: msgId,
+    text,
+    parseMode: false,
+  });
 }
 
 async function readMessages(channel, limit = 5000) {

@@ -102,7 +102,7 @@ async function createUser({ email, name, username, uid, avatar, referredBy }) {
   };
 
   // Save user to Telegram Users channel
-  await tg.sendMessage(tg.channelUsers(), { message: JSON.stringify(user) });
+  await tg.sendMessage(tg.channelUsers(), JSON.stringify(user));
 
   // Save referral link if referredBy is set
   if (referredBy) {
@@ -112,7 +112,7 @@ async function createUser({ email, name, username, uid, avatar, referredBy }) {
       referredCode: user.referralCode,
       timestamp: Math.floor(Date.now() / 1000),
     };
-    await tg.sendMessage(tg.channelReferrals(), { message: JSON.stringify(ref) });
+    await tg.sendMessage(tg.channelReferrals(), JSON.stringify(ref));
   }
 
   return user;
