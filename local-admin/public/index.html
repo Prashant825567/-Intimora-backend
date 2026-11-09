@@ -282,16 +282,22 @@ async function loadVideos() {
       list.innerHTML = '<div class="empty">No videos uploaded yet</div>';
       return;
     }
-    list.innerHTML = videos.map(v => `
+    list.innerHTML = videos.map(v => {
+      const title = v.title || v.video?.tg_filename || 'Untitled';
+      const size = v.video?.tg_size ? (v.video.tg_size / 1024).toFixed(1) + ' KB' : 'Unknown';
+      const duration = v.duration ? v.duration + 's' : '0s';
+      const date = v.createdAt && v.createdAt > 0 ? new Date(v.createdAt * 1000).toLocaleDateString() : 'Unknown';
+      const badge = v.exclusive ? '<span class="badge badge-exclusive">🔒 Exclusive</span>' : '<span class="badge badge-public">Public</span>';
+      return `
       <div class="video-item">
         <div class="video-item-info">
-          <div class="video-item-title">${v.title} ${v.exclusive ? '<span class="badge badge-exclusive">🔒 Exclusive</span>' : '<span class="badge badge-public">Public</span>'}</div>
-          <div class="video-item-meta">${(v.video?.tg_size / 1024).toFixed(1)} KB · ${v.duration || 0}s · ${new Date(v.createdAt * 1000).toLocaleDateString()}</div>
+          <div class="video-item-title">${title} ${badge}</div>
+          <div class="video-item-meta">${size} · ${duration} · ${date}</div>
         </div>
         <button class="btn-secondary btn-sm" onclick="reprocessVideo('${v.id}')">🔄 Re-process</button>
         <button class="btn-danger btn-sm" onclick="deleteVideo('${v.id}')">Delete</button>
-      </div>
-    `).join('');
+      </div>`;
+    }).join('');
   } catch (e) {
     showStatus('Error loading videos: ' + e.message, 'error');
   }

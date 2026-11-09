@@ -255,7 +255,7 @@ async function syncVideosFromTelegram() {
         const refToBase64 = (ref) => ref ? ref.toString('base64') : '';
         tgVideos.push({
           id: `tg-${msg.id}`,
-          title: msg.caption || msg.document.fileName || 'Untitled',
+          title: msg.message || msg.caption || msg.document?.fileName || 'Untitled',
           description: '',
           exclusive: false,
           duration: 0,
