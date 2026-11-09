@@ -184,24 +184,36 @@ app.get("/api/videos/:id/thumbnail", async (req, res) => {
 });
 
 // Stream video — server-side MTProto streaming with HTTP Range support
-// Each browser range request → backend fetches 512KB chunks from Telegram → streams back
+// Handles: bytes=0-1023, bytes=1024-, bytes=-1024 (suffix), clamps to fileSize
 app.get("/api/videos/:id/stream", async (req, res) => {
   try {
     const v = await store.getVideo(req.params.id);
     if (!v) return fail(res, "Video not found", 404);
 
     const streamFormat = store.toStreamFormat(v);
-    let start = 0, end = streamFormat.tg_size - 1, status = 200;
+    const fileSize = streamFormat.tg_size;
+    let start = 0, end = fileSize - 1, status = 200;
+
     const range = req.headers.range;
     if (range) {
       const m = /bytes=(\d*)-(\d*)/.exec(range);
       if (m) {
-        start = m[1] ? parseInt(m[1], 10) : 0;
-        end = m[2] ? parseInt(m[2], 10) : streamFormat.tg_size - 1;
+        if (m[1]) {
+          // bytes=start-end or bytes=start-
+          start = parseInt(m[1], 10);
+          end = m[2] ? parseInt(m[2], 10) : fileSize - 1;
+        } else if (m[2]) {
+          // bytes=-suffix → last N bytes
+          const suffix = parseInt(m[2], 10);
+          start = Math.max(0, fileSize - suffix);
+          end = fileSize - 1;
+        }
+        // Clamp end to fileSize
+        end = Math.min(end, fileSize - 1);
         status = 206;
       }
     }
-    if (start >= streamFormat.tg_size) return fail(res, "Range not satisfiable", 416);
+    if (start >= fileSize) return fail(res, "Range not satisfiable", 416);
 
     res.status(status);
     res.set({
@@ -210,10 +222,10 @@ app.get("/api/videos/:id/stream", async (req, res) => {
       "Content-Length": end - start + 1,
       "Content-Disposition": "inline",
       "Cache-Control": "public, max-age=3600",
-      "Vary": "Range",
+      "Vary": "Origin, Range",
       "Cross-Origin-Resource-Policy": "cross-origin",
     });
-    if (status === 206) res.set("Content-Range", `bytes ${start}-${end}/${streamFormat.tg_size}`);
+    if (status === 206) res.set("Content-Range", `bytes ${start}-${end}/${fileSize}`);
 
     for await (const chunk of tg.streamRange(streamFormat, start, end)) {
       if (!res.write(chunk)) {

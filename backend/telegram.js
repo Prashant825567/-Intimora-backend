@@ -242,9 +242,9 @@ async function getFileChunk(client, video, offset, limit) {
 
 // Stream a byte range [start, end] as an async generator of Buffers.
 // - Aligns to 512KB Telegram part boundaries
-// - Fetches 8 chunks in parallel (4MB in flight)
-// - Prefetches next batch while yielding current batch
-// - Trims head/tail to return exact browser-requested bytes
+// - Fetches up to 8 chunks in parallel (ordered queue, no skipping)
+// - Trims head/tail based on actual bytes returned from Telegram
+// - Handles EOF correctly (last chunk may be shorter than PART)
 async function* streamRange(video, start, end) {
   const client = await getClient();
   const fileSize = video.tg_size;
@@ -281,43 +281,36 @@ async function* streamRange(video, start, end) {
     console.log("[streamRange] file ref refresh failed:", e.message);
   }
 
-  // Align to 512KB part boundaries
+  // Align to 512KB part boundaries — but clamp to fileSize
   const alignedStart = Math.floor(start / PART) * PART;
-  const alignedEnd = Math.ceil((end + 1) / PART) * PART - 1;
-  let headDiscard = start - alignedStart;     // bytes to skip from first part
-  let tailDiscard = alignedEnd - end;         // bytes to trim from last part
+  const alignedEnd = Math.min(
+    Math.ceil((end + 1) / PART) * PART - 1,
+    Math.ceil(fileSize / PART) * PART - 1  // don't go past EOF
+  );
+  let headDiscard = start - alignedStart;
 
-  // Build part list with their original offsets
+  // Build part list — each part's limit is based on actual file size
   const parts = [];
   for (let offset = alignedStart; offset <= alignedEnd; offset += PART) {
-    const limit = Math.min(PART, alignedEnd - offset + 1);
+    const limit = Math.min(PART, fileSize - offset);
     parts.push({ offset, limit });
   }
 
-  // Prefetch pipeline: fetch next batch while yielding current batch
-  const POOL = 8; // 8 parallel 512KB chunks = 4MB in flight
-  let batchIndex = 0;
+  // Ordered queue: fetch in batches of 8, yield in order
+  const POOL = 8;
+  let results = [];
 
-  while (batchIndex < parts.length) {
-    const currentBatch = parts.slice(batchIndex, batchIndex + POOL);
-
-    // Prefetch next batch while yielding current
-    const nextBatch = parts.slice(batchIndex + POOL, batchIndex + 2 * POOL);
-    let nextResults = null;
-    if (nextBatch.length > 0) {
-      nextResults = Promise.all(
-        nextBatch.map((p) => getFileChunk(client, video, p.offset, p.limit))
-      );
-    }
-
-    // Fetch current batch
-    const currentResults = await Promise.all(
-      currentBatch.map((p) => getFileChunk(client, video, p.offset, p.limit))
+  for (let i = 0; i < parts.length; i += POOL) {
+    const batch = parts.slice(i, i + POOL);
+    // Fetch all in parallel
+    const batchResults = await Promise.all(
+      batch.map((p) => getFileChunk(client, video, p.offset, p.limit))
     );
+    results = results.concat(batchResults);
 
-    // Yield current batch in order
-    for (let i = 0; i < currentResults.length; i++) {
-      let bytes = currentResults[i];
+    // Yield results in order
+    for (let j = 0; j < results.length; j++) {
+      let bytes = results[j];
 
       // Trim head from first part
       if (headDiscard > 0) {
@@ -326,25 +319,17 @@ async function* streamRange(video, start, end) {
         headDiscard -= skip;
       }
 
-      // Trim tail from last part
-      if (tailDiscard > 0 && i === currentResults.length - 1 && batchIndex + POOL >= parts.length) {
-        bytes = bytes.subarray(0, bytes.length - tailDiscard);
-        tailDiscard = 0;
+      // Trim tail from last part — based on actual requested end
+      const partOffset = parts[j].offset;
+      const partDataStart = partOffset - alignedStart; // offset within aligned range
+      const requestedEndInPart = end - partOffset;      // how many bytes we need from this part
+      if (requestedEndInPart >= 0 && requestedEndInPart < bytes.length) {
+        bytes = bytes.subarray(0, requestedEndInPart + 1);
       }
 
       if (bytes.length) yield bytes;
     }
-
-    // Wait for next batch to complete (already prefetched)
-    if (nextResults) {
-      batchIndex += POOL;
-      // Store results for next iteration — use a simple queue
-      // Actually, let's just fetch normally — prefetch helped with latency
-      // but we can't easily yield prefetched results in order without buffering
-      // So just continue normally
-    }
-
-    batchIndex += POOL;
+    results = [];
   }
 }
 
