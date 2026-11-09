@@ -206,6 +206,108 @@ function processVideoFastStart(inputPath, outputPath) {
   });
 }
 
+// === Download video from Telegram ===
+async function downloadVideoFromTelegram(videoMeta) {
+  if (!tg.isConnected || !tg.isConnected()) await tg.connect();
+  const inputVideo = await tg.getInputEntity(config.videoChannel);
+  const messages = await tg.getMessages(config.videoChannel, { ids: [videoMeta.video.tg_msg_id] });
+  if (!messages || messages.length === 0) throw new Error('Message not found in Telegram');
+  const msg = messages[0];
+  const tempPath = path.join(os.tmpdir(), `download-${Date.now()}.mp4`);
+  await tg.downloadMedia(msg, { outputFile: tempPath });
+  return tempPath;
+}
+
+// === Reprocess video — download → ffmpeg → re-upload ===
+async function reprocessVideo(videoId) {
+  const videoMeta = localMetadata.find(v => v.id === videoId);
+  if (!videoMeta) throw new Error('Video not found');
+
+  console.log(`🔄 Reprocessing: ${videoMeta.title}`);
+
+  // Step 1: Download from Telegram
+  console.log('  Step 1: Downloading from Telegram...');
+  const downloadedPath = await downloadVideoFromTelegram(videoMeta);
+
+  // Step 2: Check file structure
+  const fileBuffer = fs.readFileSync(downloadedPath);
+  const headBuffer = fileBuffer.subarray(0, Math.min(65536, fileBuffer.length));
+  const fileStructure = checkFileStructure(headBuffer);
+
+  if (fileStructure.fastStart) {
+    console.log('  ✅ Already fast-start — no processing needed');
+    fs.unlinkSync(downloadedPath);
+    return { ok: true, message: 'Already optimized', needsProcessing: false };
+  }
+
+  // Step 3: Process with ffmpeg
+  console.log('  Step 2: Processing with ffmpeg...');
+  const processedPath = path.join(os.tmpdir(), `reprocessed-${Date.now()}.mp4`);
+  await processVideoFastStart(downloadedPath, processedPath);
+  fs.unlinkSync(downloadedPath); // delete original
+
+  // Step 4: Re-upload to Telegram
+  console.log('  Step 3: Re-uploading to Telegram...');
+  if (!ffmpegAvailable) throw new Error('ffmpeg not available');
+  if (!tg.isConnected || !tg.isConnected()) await tg.connect();
+
+  const inputVideo = await tg.getInputEntity(config.videoChannel);
+  const thumbPath = path.join(os.tmpdir(), `thumb-${Date.now()}.jpg`);
+  // Download existing thumbnail
+  try {
+    const thumbMsg = await tg.getMessages(config.thumbChannel, { ids: [videoMeta.thumbnail.thumb_msg_id] });
+    if (thumbMsg && thumbMsg.length > 0) {
+      await tg.downloadMedia(thumbMsg[0], { outputFile: thumbPath });
+    }
+  } catch {}
+
+  const videoMsg = await tg.sendFile(inputVideo, {
+    file: processedPath,
+    caption: videoMeta.title,
+    forceDocument: true,
+    thumb: fs.existsSync(thumbPath) ? thumbPath : undefined,
+    workers: 4,
+  });
+
+  // Step 5: Delete old video message from Telegram
+  console.log('  Step 4: Deleting old video message...');
+  try {
+    await tg.deleteMessages(config.videoChannel, [videoMeta.video.tg_msg_id]);
+  } catch (e) {
+    console.log('  ⚠️ Could not delete old message:', e.message);
+  }
+
+  // Step 6: Update metadata
+  const doc = videoMsg.document;
+  const refToBase64 = (ref) => ref ? ref.toString('base64') : '';
+
+  const updatedMeta = {
+    ...videoMeta,
+    video: {
+      tg_doc_id: doc?.id ? String(doc.id) : '',
+      tg_access_hash: doc?.accessHash ? String(doc.accessHash) : '',
+      tg_file_ref: refToBase64(doc?.fileReference),
+      tg_size: doc?.size || fs.statSync(processedPath).size,
+      tg_mime: doc?.mimeType || 'video/mp4',
+      tg_channel: config.videoChannel,
+      tg_msg_id: videoMsg.id,
+      tg_filename: videoMeta.video.tg_filename || 'video.mp4',
+    },
+  };
+
+  // Update in local metadata
+  const idx = localMetadata.findIndex(v => v.id === videoId);
+  localMetadata[idx] = updatedMeta;
+  saveMetadata();
+
+  // Step 7: Cleanup
+  if (fs.existsSync(processedPath)) fs.unlinkSync(processedPath);
+  if (fs.existsSync(thumbPath)) fs.unlinkSync(thumbPath);
+
+  console.log('✅ Reprocess complete!');
+  return { ok: true, message: 'Video reprocessed successfully', needsProcessing: true };
+}
+
 // === Express ===
 const app = express();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2000 * 1024 * 1024 } });
@@ -378,6 +480,16 @@ app.post('/api/delete/:id', (req, res) => {
   localMetadata = localMetadata.filter(v => v.id !== req.params.id);
   saveMetadata();
   res.json({ ok: true, data: { message: 'Deleted' } });
+});
+
+// Reprocess — download → ffmpeg → re-upload
+app.post('/api/reprocess/:id', async (req, res) => {
+  try {
+    const result = await reprocessVideo(req.params.id);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
 });
 
 // Export

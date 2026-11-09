@@ -287,6 +287,7 @@ async function loadVideos() {
           <div class="video-item-title">${v.title} ${v.exclusive ? '<span class="badge badge-exclusive">🔒 Exclusive</span>' : '<span class="badge badge-public">Public</span>'}</div>
           <div class="video-item-meta">${(v.video?.tg_size / 1024).toFixed(1)} KB · ${v.duration || 0}s · ${new Date(v.createdAt * 1000).toLocaleDateString()}</div>
         </div>
+        <button class="btn-secondary btn-sm" onclick="reprocessVideo('${v.id}')">🔄 Re-process</button>
         <button class="btn-danger btn-sm" onclick="deleteVideo('${v.id}')">Delete</button>
       </div>
     `).join('');
@@ -399,6 +400,22 @@ async function uploadVideo() {
   };
 
   xhr.send(formData);
+}
+
+async function reprocessVideo(id) {
+  showStatus('Re-processing video... This may take a few minutes', 'loading');
+  try {
+    const res = await fetch('/api/reprocess/' + id, { method: 'POST' });
+    const data = await res.json();
+    if (data.ok) {
+      showStatus(data.message || 'Re-processed successfully! ✅', 'success');
+      loadVideos();
+    } else {
+      showStatus('Error: ' + data.error, 'error');
+    }
+  } catch (e) {
+    showStatus('Error: ' + e.message, 'error');
+  }
 }
 
 async function deleteVideo(id) {
