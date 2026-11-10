@@ -41,20 +41,33 @@ function channelReferrals() {
   return c;
 }
 
+let _clientLock = Promise.resolve();
 async function getClient() {
   if (_client && _client.isConnected && _client.isConnected()) return _client;
-  const { apiId, apiHash } = cfg();
-  const session = new StringSession(process.env.TELEGRAM_SESSION || "");
-  _client = new TelegramClient(session, apiId, apiHash, {
-    connectionRetries: 5,
-    maxConcurrentDownloads: 4,
-    downloadPool: { poolSize: 2, workers: 4, requestDeadlineMs: 60000 },
-  });
-  await _client.connect();
-  if (!(await _client.isUserAuthorized())) {
-    throw new Error("Telegram session not authorized — run `npm run login` and set TELEGRAM_SESSION");
+  // Lock: prevent multiple clients being created with same session (causes "Concurrent usage" error)
+  const prevLock = _clientLock;
+  let resolveLock;
+  _clientLock = new Promise((r) => { resolveLock = r; });
+  try {
+    // Wait for previous lock to resolve
+    await prevLock;
+    // Re-check after acquiring lock (another request may have already created the client)
+    if (_client && _client.isConnected && _client.isConnected()) return _client;
+    const { apiId, apiHash } = cfg();
+    const session = new StringSession(process.env.TELEGRAM_SESSION || "");
+    _client = new TelegramClient(session, apiId, apiHash, {
+      connectionRetries: 5,
+      maxConcurrentDownloads: 4,
+      downloadPool: { poolSize: 2, workers: 4, requestDeadlineMs: 60000 },
+    });
+    await _client.connect();
+    if (!(await _client.isUserAuthorized())) {
+      throw new Error("Telegram session not authorized — run `npm run login` and set TELEGRAM_SESSION");
+    }
+    return _client;
+  } finally {
+    resolveLock();
   }
-  return _client;
 }
 
 // ================= LOGIN (web, two-step, no 2FA) =================

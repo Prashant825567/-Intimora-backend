@@ -124,6 +124,16 @@ if (fs.existsSync(META_FILE)) {
   localMetadata = JSON.parse(fs.readFileSync(META_FILE, 'utf-8'));
 }
 
+// === Telegram Operations Lock ===
+// Prevents concurrent Telegram session usage (causes "Concurrent usage" error)
+let telegramLock = Promise.resolve();
+function withTelegramLock(fn) {
+  const run = telegramLock.then(() => fn());
+  // Prevent unhandled rejection from blocking the queue
+  telegramLock = run.then(() => {}, () => {});
+  return run;
+}
+
 function saveMetadata() {
   fs.writeFileSync(META_FILE, JSON.stringify(localMetadata, null, 2));
 }
