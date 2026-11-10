@@ -228,15 +228,17 @@ app.get("/api/videos/:id/stream", async (req, res) => {
       try {
         const moov = await tg.findMoovAtom(streamFormat);
         if (moov) {
-          // moov is at the end — send ftyp + moov as 200 response
+          // moov is at the end — send ftyp + moov as 206 partial response
+          // Browser needs 206 (not 200) so it knows to request mdat chunks after
           const ftypData = await tg.readFileRange(streamFormat, 0, 31);
           const totalBytes = ftypData.length + moov.data.length;
 
-          res.status(200);
+          res.status(206);
           res.set({
             "Content-Type": "video/mp4",
             "Accept-Ranges": "bytes",
             "Content-Length": totalBytes,
+            "Content-Range": `bytes 0-${totalBytes - 1}/${fileSize}`,
             "Cache-Control": "public, max-age=3600",
             "Vary": "Origin, Range",
             "Cross-Origin-Resource-Policy": "cross-origin",
