@@ -290,7 +290,7 @@ async function loadVideos() {
       const date = v.createdAt && v.createdAt > 0 ? new Date(v.createdAt * 1000).toLocaleDateString() : 'Unknown';
       const badge = v.exclusive ? '<span class="badge badge-exclusive">🔒 Exclusive</span>' : '<span class="badge badge-public">Public</span>';
       const fastStartBadge = v.is_fast_start ? ' <span class="badge badge-fs">⚡ Fast-start</span>' : '';
-      const reprocessBtn = v.is_fast_start ? '' : `<button class="btn-secondary btn-sm" onclick="reprocessVideo('${v.id}')">🔄 Re-process</button>`;
+      const reprocessBtn = `<button class="btn-secondary btn-sm" onclick="reprocessVideo('${v.id}')">🔄 Re-process</button>`;
       return `
       <div class="video-item">
         <div class="video-item-info">
