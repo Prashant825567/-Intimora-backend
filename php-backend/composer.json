@@ -1,0 +1,16 @@
+{
+    "name": "intimora/php-backend",
+    "description": "Intimora PHP Backend with MTProto",
+    "type": "project",
+    "require": {
+        "php": ">=8.1",
+        "amphp/amphp": "^2.0",
+        "revolt/event-loop": "^1.0",
+        "danog/madelineproto": "^3.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Intimora\\": "src/"
+        }
+    }
+}

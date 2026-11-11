@@ -203,10 +203,23 @@ async function getReferralTree(uid) {
   const userMap = {};
   users.forEach((u) => { userMap[u.referralCode] = u; });
 
+  // Format referral users with explicit fields
+  const formatUser = (u) => ({
+    email: u.email || '',
+    firebaseUid: u.uid || '',
+    name: u.name || '',
+    username: u.username || '',
+    avatar: u.avatar || '',
+    referralCode: u.referralCode || '',
+    likedVideos: u.likedVideos || [],
+    savedVideos: u.savedVideos || [],
+    createdAt: u.createdAt || 0,
+  });
+
   return {
     code: myCode,
-    direct: direct.map((r) => userMap[r.referredCode]).filter(Boolean),
-    level2: level2.map((r) => userMap[r.referredCode]).filter(Boolean),
+    direct: direct.map((r) => formatUser(userMap[r.referredCode])).filter(Boolean),
+    level2: level2.map((r) => formatUser(userMap[r.referredCode])).filter(Boolean),
   };
 }
 
